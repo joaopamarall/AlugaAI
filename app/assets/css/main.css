@@ -1,0 +1,40 @@
+@tailwind "tailwindcss";
+
+/* =========================================================
+   THEME TOKENS — Light, clean e minimalista
+   ========================================================= */
+:root {
+  /* Cores base */
+  --bg: 238 239 241; /* #e2e8f0 */
+  --surface: 255 255 255; /* #ffffff */
+  --surface-2: 245 247 250; /* cards/hover very subtle */
+  --text: 18 25 38; /* #121926 */
+  --muted: 101 116 139; /* slate-500 */
+  --stroke: 226 232 240; /* slate-200 */
+  --shadow: 9 17 34; /* p/ sombra */
+
+  /* Marca */
+  --brand: 33 150 243; /* azul clean (material-ish) */
+  --brand-strong: 21 101 192; /* hover/press */
+
+  /* Estados */
+  --danger: 220 38 38;
+  --focus-ring: 33 150 243; /* mesmo do brand */
+
+  /* Radius e efeitos */
+  --radius: 16px;
+  --blur: 10px;
+}
+
+/* Base global */
+html,
+body {
+  height: 100%;
+}
+body {
+  color: rgb(var(--text));
+  background: rgb(var(--bg));
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01" on, "cv01" on;
+  font-family: "Roboto", sans-serif;
+}
