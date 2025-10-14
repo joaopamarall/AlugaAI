@@ -25,7 +25,7 @@
           />
           <p
             v-if="showErrors && !validEmail"
-            class="mt-1 caption"
+            class="caption"
             style="color: rgb(220, 38, 38)"
           >
             Informe um e-mail válido.
@@ -33,7 +33,7 @@
         </div>
 
         <div>
-          <label class="block caption muted mb-1">Senha</label>
+          <label class="block caption muted">Senha</label>
           <div class="relative">
             <input
               v-model="password"
@@ -52,7 +52,7 @@
           </div>
           <p
             v-if="showErrors && !validPassword"
-            class="mt-1 caption"
+            class="caption"
             style="color: rgb(220, 38, 38)"
           >
             Mínimo de 6 caracteres.
@@ -271,8 +271,8 @@ function goGuest() {
   border: 0;
   background: none;
   position: absolute;
-  top: 258px;
-  right: 48px;
+  top: 8px;
+  right: 20px;
 }
 
 .btn-outline {

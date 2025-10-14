@@ -35,7 +35,7 @@
     <section class="container">
       <!-- Ações rápidas -->
       <div class="quick">
-        <NuxtLink to="/locacoes/abrir" class="quick-card">
+        <NuxtLink to="/reservations/open" class="quick-card">
           <div class="quick-icon" data-variant="sky">➕</div>
           <div class="quick-text">
             <div class="quick-title">Nova locação</div>
@@ -43,7 +43,7 @@
           </div>
         </NuxtLink>
 
-        <NuxtLink to="/itens/form" class="quick-card">
+        <NuxtLink to="/items/form" class="quick-card">
           <div class="quick-icon" data-variant="emerald">📦</div>
           <div class="quick-text">
             <div class="quick-title">Novo item</div>
@@ -51,7 +51,7 @@
           </div>
         </NuxtLink>
 
-        <NuxtLink to="/clientes/form" class="quick-card">
+        <NuxtLink to="/clients/form" class="quick-card">
           <div class="quick-icon" data-variant="indigo">👤</div>
           <div class="quick-text">
             <div class="quick-title">Novo cliente</div>
