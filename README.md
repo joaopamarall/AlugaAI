@@ -20,6 +20,23 @@ yarn install
 bun install
 ```
 
+## Firebase configuration
+
+1. Crie um projeto no [Firebase Console](https://console.firebase.google.com/) e habilite o **Authentication > Sign-in method > Google**.
+2. Copie as credenciais do app Web e preencha as variáveis no arquivo `.env` (veja a seguir):
+
+```bash
+NUXT_PUBLIC_FIREBASE_API_KEY=
+NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NUXT_PUBLIC_FIREBASE_PROJECT_ID=
+NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NUXT_PUBLIC_FIREBASE_APP_ID=
+NUXT_PUBLIC_FIREBASE_MEASUREMENT_ID= # opcional para Analytics
+```
+
+> Caso esteja versionando, crie um `.env.example` e mantenha o `.env` fora do controle de versão.
+
 ## Development Server
 
 Start the development server on `http://localhost:3000`:

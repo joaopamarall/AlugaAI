@@ -1,15 +1,33 @@
-﻿<template>
+<template>
   <main class="container-app">
     <div class="bg-app"></div>
 
     <section class="card">
       <header class="grid place-items-center text-center gap-1 mb-6">
-        <div class="brand-mark">🛠️</div>
+        <div class="brand-mark">???</div>
         <h1 class="h1">AlugaAI</h1>
-        <p class="muted caption">Acesse sua conta</p>
+        <p class="muted caption">Crie sua conta</p>
       </header>
 
       <form @submit.prevent="submit" class="grid gap-4" novalidate>
+        <div>
+          <label class="block caption muted mb-1">Nome</label>
+          <input
+            v-model.trim="displayName"
+            type="text"
+            placeholder="Seu nome completo"
+            autocomplete="name"
+            :class="['input', showErrors && !validName ? 'input--invalid' : '']"
+          />
+          <p
+            v-if="showErrors && !validName"
+            class="caption"
+            style="color: rgb(220, 38, 38)"
+          >
+            Informe seu nome completo.
+          </p>
+        </div>
+
         <div>
           <label class="block caption muted mb-1">E-mail</label>
           <input
@@ -18,28 +36,25 @@
             inputmode="email"
             placeholder="voce@email.com"
             autocomplete="email"
-            :class="[
-              'input ',
-              showErrors && !validEmail ? 'input--invalid' : '',
-            ]"
+            :class="['input', showErrors && !validEmail ? 'input--invalid' : '']"
           />
           <p
             v-if="showErrors && !validEmail"
             class="caption"
             style="color: rgb(220, 38, 38)"
           >
-            Informe um e-mail válido.
+            Informe um e-mail valido.
           </p>
         </div>
 
         <div>
-          <label class="block caption muted">Senha</label>
+          <label class="block caption muted mb-1">Senha</label>
           <div class="relative">
             <input
               v-model="password"
               :type="showPass ? 'text' : 'password'"
-              placeholder="••••••••"
-              autocomplete="current-password"
+              placeholder="********"
+              autocomplete="new-password"
               :class="[
                 'input',
                 'pr-24',
@@ -47,7 +62,7 @@
               ]"
             />
             <button type="button" class="btn-eye" @click="showPass = !showPass">
-              <img :src="showPass ? eye : eyeOff" />
+              <img :src="showPass ? eye : eyeOff" alt="" />
             </button>
           </div>
           <p
@@ -55,30 +70,48 @@
             class="caption"
             style="color: rgb(220, 38, 38)"
           >
-            Mínimo de 6 caracteres.
+            Minimo de 6 caracteres.
           </p>
         </div>
 
-        <div class="flex items-center justify-between">
-          <label class="inline-flex items-center caption muted">
+        <div>
+          <label class="block caption muted mb-1">Confirme a senha</label>
+          <div class="relative">
             <input
-              type="checkbox"
-              v-model="remember"
-              class="size-4 rounded border-slate-300"
+              v-model="confirmPassword"
+              :type="showConfirmPass ? 'text' : 'password'"
+              placeholder="********"
+              autocomplete="new-password"
+              :class="[
+                'input',
+                'pr-24',
+                showErrors && !passwordsMatch ? 'input--invalid' : '',
+              ]"
             />
-            Lembrar-me
-          </label>
-          <NuxtLink to="#" @click.prevent class="link caption"
-            >Esqueceu a senha?</NuxtLink
+            <button
+              type="button"
+              class="btn-eye"
+              @click="showConfirmPass = !showConfirmPass"
+            >
+              <img :src="showConfirmPass ? eye : eyeOff" alt="" />
+            </button>
+          </div>
+          <p
+            v-if="showErrors && !passwordsMatch"
+            class="caption"
+            style="color: rgb(220, 38, 38)"
           >
+            As senhas nao conferem.
+          </p>
         </div>
+
         <button
           type="submit"
           :disabled="loading || !canSubmit || !hasFirebase"
           class="btn btn-primary btn-entrar"
         >
-          <span v-if="!loading">Entrar</span>
-          <span v-else>Entrando...</span>
+          <span v-if="!loading">Criar conta</span>
+          <span v-else>Criando...</span>
         </button>
         <p v-if="errorMessage" class="caption error-msg">{{ errorMessage }}</p>
       </form>
@@ -92,27 +125,23 @@
           type="button"
           class="btn btn-outline btn-google"
           :disabled="googleLoading || loading || !hasFirebase"
-          @click="loginWithGoogle"
+          @click="signUpWithGoogle"
         >
           <span class="google-mark" aria-hidden="true">G</span>
-          <span>{{
-            googleLoading ? "Conectando..." : "Entrar com Google"
-          }}</span>
+        <span>{{ googleLoading ? "Conectando..." : "Criar conta com Google" }}</span>
         </button>
       </div>
 
       <div class="divider place-items-center" role="separator">
-        <span
-          >Ainda não tem uma conta?
-          <NuxtLink to="/register" class="link caption"
-            >Criar conta</NuxtLink
-          ></span
-        >
+        <span>
+          Ja tem uma conta?
+          <NuxtLink to="/" class="link caption">Entrar</NuxtLink>
+        </span>
       </div>
     </section>
 
     <footer class="w-full text-center p-4 muted caption">
-      Â© {{ new Date().getFullYear() }} AlugaAI
+      &copy; {{ new Date().getFullYear() }} AlugaAI
     </footer>
   </main>
 </template>
@@ -120,10 +149,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import {
-  browserLocalPersistence,
-  browserSessionPersistence,
-  setPersistence,
-  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
 import type { FirebaseError } from "firebase/app";
 import eye from "@/assets/images/icons/visibility_24dp_000000_FILL0_wght400_GRAD0_opsz24.png";
@@ -134,18 +161,30 @@ const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
 const { user: currentUser } = useFirebaseUser();
 
+const displayName = ref("");
 const email = ref("");
 const password = ref("");
-const remember = ref(true);
+const confirmPassword = ref("");
 const showPass = ref(false);
+const showConfirmPass = ref(false);
 const showErrors = ref(false);
 const loading = ref(false);
 const googleLoading = ref(false);
 const errorMessage = ref("");
 
+const validName = computed(() => displayName.value.trim().length >= 3);
 const validEmail = computed(() => /\S+@\S+\.\S+/.test(email.value));
 const validPassword = computed(() => (password.value?.length ?? 0) >= 6);
-const canSubmit = computed(() => validEmail.value && validPassword.value);
+const passwordsMatch = computed(
+  () => password.value === confirmPassword.value && password.value !== ""
+);
+const canSubmit = computed(
+  () =>
+    validName.value &&
+    validEmail.value &&
+    validPassword.value &&
+    passwordsMatch.value
+);
 const hasFirebase = computed(() => Boolean(firebase?.auth));
 
 onMounted(() => {
@@ -153,7 +192,7 @@ onMounted(() => {
     navigateTo("/home");
   } else if (!hasFirebase.value) {
     errorMessage.value =
-      "Firebase não está configurado. Atualize o .env com as credenciais.";
+      "Firebase nao esta configurado. Atualize o .env com as credenciais.";
   }
 });
 
@@ -170,17 +209,20 @@ function formatFirebaseError(err: unknown): string {
   const error = err as Partial<FirebaseError> | null;
   const code = typeof error?.code === "string" ? error.code : "";
   switch (code) {
-    case "auth/invalid-credential":
-    case "auth/wrong-password":
-      return "Credenciais inválidas. Verifique e tente novamente.";
-    case "auth/user-not-found":
-      return "Usuário não encontrado.";
-    case "auth/popup-closed-by-user":
-      return "Login cancelado antes de finalizar.";
+    case "auth/email-already-in-use":
+      return "E-mail ja esta em uso.";
+    case "auth/invalid-email":
+      return "E-mail invalido.";
+    case "auth/operation-not-allowed":
+      return "Cadastro desativado pelo administrador.";
+    case "auth/weak-password":
+      return "Senha muito fraca. Escolha outra.";
     case "auth/network-request-failed":
       return "Falha de rede ao comunicar com o Firebase.";
+    case "auth/popup-closed-by-user":
+      return "Cadastro cancelado antes de finalizar.";
     default:
-      return "Não foi possí­vel entrar. Tente novamente em instantes.";
+      return "Nao foi possivel concluir o cadastro. Tente novamente.";
   }
 }
 
@@ -190,21 +232,22 @@ async function submit() {
   if (!canSubmit.value || loading.value) return;
   if (!firebase?.auth) {
     errorMessage.value =
-      "Firebase não está configurado. Verifique as variáveis de ambiente.";
+      "Firebase nao esta configurado. Verifique as variaveis de ambiente.";
     return;
   }
 
   loading.value = true;
   try {
-    await setPersistence(
-      firebase.auth,
-      remember.value ? browserLocalPersistence : browserSessionPersistence
-    );
-    await signInWithEmailAndPassword(
+    const credential = await createUserWithEmailAndPassword(
       firebase.auth,
       email.value,
       password.value
     );
+    if (credential.user && validName.value) {
+      await updateProfile(credential.user, {
+        displayName: displayName.value.trim(),
+      });
+    }
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
   } finally {
@@ -212,12 +255,12 @@ async function submit() {
   }
 }
 
-async function loginWithGoogle() {
+async function signUpWithGoogle() {
   errorMessage.value = "";
   if (googleLoading.value || loading.value) return;
   if (!firebase?.signInWithGoogle) {
     errorMessage.value =
-      "Firebase não está configurado. Verifique as variáveis de ambiente.";
+      "Firebase nao esta configurado. Verifique as variaveis de ambiente.";
     return;
   }
 
@@ -256,7 +299,6 @@ async function loginWithGoogle() {
   filter: blur(var(--blur));
 }
 
-/* Layout */
 .container-app {
   min-height: 100dvh;
   display: grid;
@@ -266,7 +308,6 @@ async function loginWithGoogle() {
   font-family: "Roboto", sans-serif;
 }
 
-/* Card/Surface */
 .card {
   width: min(92vw, 420px);
   border-radius: var(--radius);
@@ -419,7 +460,6 @@ async function loginWithGoogle() {
   color: rgb(220, 38, 38);
 }
 
-/* Links */
 .link {
   color: rgb(var(--brand));
 }

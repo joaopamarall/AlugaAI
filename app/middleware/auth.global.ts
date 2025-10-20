@@ -1,15 +1,26 @@
-// app/middleware/auth.global.ts
-export default defineNuxtRouteMiddleware((to) => {
-  // só no client (localStorage)
-  if (process.server) return
+import { useFirebaseUser, waitForAuthReady } from "@/composables/useFirebaseUser";
 
-  // rotas protegidas (prefix match)
-  const PROTECTED = ['/home'] // adicione mais: '/dashboard', '/locacoes', etc.
-  const needsAuth = PROTECTED.some(p => to.path.startsWith(p))
-  if (!needsAuth) return
+export default defineNuxtRouteMiddleware(async (to) => {
+  if (process.server) return;
 
-  const raw = localStorage.getItem('alugaai:user')
-  if (!raw) {
-    return navigateTo('/') // volta pro login
+  const PROTECTED = ["/home"];
+  const needsAuth = PROTECTED.some((path) => to.path.startsWith(path));
+  if (!needsAuth) return;
+
+  const nuxtApp = useNuxtApp();
+  const firebase = nuxtApp.$firebase;
+
+  if (!firebase?.auth) {
+    console.warn(
+      "[auth] Firebase não configurado. Redirecionando para a página de login."
+    );
+    return navigateTo("/");
   }
-})
+
+  await waitForAuthReady();
+  const { user } = useFirebaseUser();
+
+  if (!user.value) {
+    return navigateTo("/");
+  }
+});

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <main class="home-shell">
     <!-- fundo sutil -->
     <div class="bg-decor"></div>
@@ -26,14 +26,25 @@
           <span class="hello"
             >Olá, <b>{{ userName }}</b></span
           >
-          <button class="avatar" :title="userEmail">{{ userInitials }}</button>
+          <button class="avatar" type="button" :title="userEmail">
+            {{ userInitials }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline btn-signout"
+            :disabled="signingOut"
+            @click="logout"
+          >
+            <span v-if="!signingOut">Sair</span>
+            <span v-else>Saindo...</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Conteúdo -->
+    <p v-if="signOutError" class="signout-error">{{ signOutError }}</p>
+
     <section class="container">
-      <!-- Ações rápidas -->
       <div class="quick">
         <NuxtLink to="/reservations/open" class="quick-card">
           <div class="quick-icon" data-variant="sky">➕</div>
@@ -81,9 +92,7 @@
         </div>
       </div>
 
-      <!-- Listas -->
       <div class="lists">
-        <!-- Locações ativas -->
         <div class="card">
           <div class="card-head">
             <h2>Locações ativas</h2>
@@ -115,7 +124,6 @@
           </ul>
         </div>
 
-        <!-- Itens em manutenção -->
         <div class="card">
           <div class="card-head">
             <h2>Itens em manutenção</h2>
@@ -142,30 +150,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from "vue";
+import { computed, reactive, ref, onMounted } from "vue";
+import { useFirebaseUser } from "@/composables/useFirebaseUser";
 
 const q = ref("");
 
-// Usuário a partir do localStorage (mesma ideia do login)
-const userEmail = computed(() => {
-  if (process.client) {
-    try {
-      return (
-        JSON.parse(localStorage.getItem("alugaai:user") || "{}")?.email ||
-        "user@aluga.ai"
-      );
-    } catch {
-      return "user@aluga.ai";
-    }
+const { user } = useFirebaseUser();
+const userEmail = computed(() => user.value?.email ?? "user@aluga.ai");
+const userName = computed(() => {
+  if (user.value?.displayName) {
+    return user.value.displayName;
   }
-  return "user@aluga.ai";
+  return userEmail.value.split("@")[0].replace(/\W+/g, " ");
 });
-const userName = computed(() =>
-  userEmail.value.split("@")[0].replace(/\W+/g, " ")
-);
-const userInitials = computed(
-  () => userName.value?.slice(0, 2).toUpperCase() || "US"
-);
+const userInitials = computed(() => {
+  const name = userName.value?.trim();
+  if (!name) {
+    return "US";
+  }
+  const parts = name.split(" ").filter(Boolean);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  const first = parts[0].charAt(0).toUpperCase();
+  const last = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${first}${last}`;
+});
+
+const nuxtApp = useNuxtApp();
+const firebase = nuxtApp.$firebase;
+const signingOut = ref(false);
+const signOutError = ref("");
 
 // Tipos simples
 type Rental = {
@@ -214,6 +229,29 @@ onMounted(() => {
   kpi.late = 0;
 });
 
+async function logout() {
+  signOutError.value = "";
+  if (signingOut.value) return;
+
+  if (!firebase?.signOutFirebase) {
+    signOutError.value =
+      "Firebase não está disponível no momento. Atualize a página.";
+    return;
+  }
+
+  signingOut.value = true;
+  try {
+    await firebase.signOutFirebase();
+    await navigateTo("/");
+  } catch (error) {
+    console.error("[home] signOut error:", error);
+    signOutError.value =
+      "Não foi possível encerrar a sessão. Tente novamente em instantes.";
+  } finally {
+    signingOut.value = false;
+  }
+}
+
 function toShortDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString();
@@ -224,7 +262,6 @@ function toShortDate(iso: string) {
 </script>
 
 <style scoped>
-/* =============  Tokens locais (light)  ============= */
 .home-shell {
   --bg: #f8f9fb;
   --text: #121926;
@@ -372,6 +409,28 @@ function toShortDate(iso: string) {
   cursor: default;
 }
 
+.btn-signout {
+  padding: 8px 12px;
+  font: 600 13px "Roboto", sans-serif;
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fff;
+}
+.btn-signout:hover:not(:disabled) {
+  background: #fee2e2;
+}
+.btn-signout:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.signout-error {
+  margin: 8px 0 0;
+  text-align: right;
+  color: #dc2626;
+  font: 500 14px "Roboto", sans-serif;
+}
+
 /* ===== Container e Cards ===== */
 .container {
   margin: 0 auto;
@@ -389,7 +448,6 @@ function toShortDate(iso: string) {
     0 2px 8px rgba(var(--shadow), 0.04);
 }
 
-/* Ações rápidas */
 .quick {
   display: grid;
   gap: 12px;
