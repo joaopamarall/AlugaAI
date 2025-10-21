@@ -4,7 +4,7 @@
 
     <section class="card">
       <header class="grid place-items-center text-center gap-1 mb-6">
-        <div class="brand-mark">???</div>
+        <div class="brand-mark">🛠️</div>
         <h1 class="h1">AlugaAI</h1>
         <p class="muted caption">Crie sua conta</p>
       </header>
@@ -36,14 +36,17 @@
             inputmode="email"
             placeholder="voce@email.com"
             autocomplete="email"
-            :class="['input', showErrors && !validEmail ? 'input--invalid' : '']"
+            :class="[
+              'input',
+              showErrors && !validEmail ? 'input--invalid' : '',
+            ]"
           />
           <p
             v-if="showErrors && !validEmail"
             class="caption"
             style="color: rgb(220, 38, 38)"
           >
-            Informe um e-mail valido.
+            Informe um e-mail válido.
           </p>
         </div>
 
@@ -70,7 +73,7 @@
             class="caption"
             style="color: rgb(220, 38, 38)"
           >
-            Minimo de 6 caracteres.
+            Mínimo de 6 caracteres.
           </p>
         </div>
 
@@ -101,7 +104,7 @@
             class="caption"
             style="color: rgb(220, 38, 38)"
           >
-            As senhas nao conferem.
+            As senhas não conferem.
           </p>
         </div>
 
@@ -128,14 +131,16 @@
           @click="signUpWithGoogle"
         >
           <span class="google-mark" aria-hidden="true">G</span>
-        <span>{{ googleLoading ? "Conectando..." : "Criar conta com Google" }}</span>
+          <span>{{
+            googleLoading ? "Conectando..." : "Criar conta com o Google"
+          }}</span>
         </button>
       </div>
 
       <div class="divider place-items-center" role="separator">
         <span>
-          Ja tem uma conta?
-          <NuxtLink to="/" class="link caption">Entrar</NuxtLink>
+          Já tem uma conta?
+          <NuxtLink to="/login" class="link caption">Entrar</NuxtLink>
         </span>
       </div>
     </section>
@@ -148,18 +153,20 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-} from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import type { FirebaseError } from "firebase/app";
 import eye from "@/assets/images/icons/visibility_24dp_000000_FILL0_wght400_GRAD0_opsz24.png";
 import eyeOff from "@/assets/images/icons/visibility_off_24dp_000000_FILL0_wght400_GRAD0_opsz24.png";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
+import {
+  ensureUserProfile,
+  useUserProfile,
+} from "@/composables/useUserProfile";
 
 const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
 const { user: currentUser } = useFirebaseUser();
+const { role } = useUserProfile();
 
 const displayName = ref("");
 const email = ref("");
@@ -171,6 +178,7 @@ const showErrors = ref(false);
 const loading = ref(false);
 const googleLoading = ref(false);
 const errorMessage = ref("");
+const redirecting = ref(false);
 
 const validName = computed(() => displayName.value.trim().length >= 3);
 const validEmail = computed(() => /\S+@\S+\.\S+/.test(email.value));
@@ -189,10 +197,10 @@ const hasFirebase = computed(() => Boolean(firebase?.auth));
 
 onMounted(() => {
   if (currentUser.value) {
-    navigateTo("/home");
+    handleAuthenticatedUser(true);
   } else if (!hasFirebase.value) {
     errorMessage.value =
-      "Firebase nao esta configurado. Atualize o .env com as credenciais.";
+      "Firebase não está configurado. Atualize o .env com as credenciais.";
   }
 });
 
@@ -200,7 +208,7 @@ watch(
   () => currentUser.value,
   (user) => {
     if (user) {
-      navigateTo("/home");
+      handleAuthenticatedUser(true);
     }
   }
 );
@@ -210,19 +218,35 @@ function formatFirebaseError(err: unknown): string {
   const code = typeof error?.code === "string" ? error.code : "";
   switch (code) {
     case "auth/email-already-in-use":
-      return "E-mail ja esta em uso.";
+      return "E-mail já está em uso.";
     case "auth/invalid-email":
-      return "E-mail invalido.";
+      return "E-mail inválido.";
     case "auth/operation-not-allowed":
       return "Cadastro desativado pelo administrador.";
     case "auth/weak-password":
-      return "Senha muito fraca. Escolha outra.";
+      return "Senha muito fraca. Escolha uma senha mais forte.";
     case "auth/network-request-failed":
-      return "Falha de rede ao comunicar com o Firebase.";
+      return "Falha de rede ao comunicar com o Firebase. Tente novamente em instantes.";
     case "auth/popup-closed-by-user":
       return "Cadastro cancelado antes de finalizar.";
     default:
-      return "Nao foi possivel concluir o cadastro. Tente novamente.";
+      return "Não foi possível concluir o cadastro. Tente novamente em instantes.";
+  }
+}
+
+async function handleAuthenticatedUser(force = false) {
+  if (!currentUser.value || redirecting.value) return;
+  if (!firebase?.auth) return;
+
+  redirecting.value = true;
+  try {
+    await ensureUserProfile({ force });
+    const destination = role.value === "admin" ? "/admin/home" : "/app/catalog";
+    await navigateTo(destination);
+  } catch (error) {
+    console.error("[register] redirect error:", error);
+  } finally {
+    redirecting.value = false;
   }
 }
 
@@ -232,7 +256,7 @@ async function submit() {
   if (!canSubmit.value || loading.value) return;
   if (!firebase?.auth) {
     errorMessage.value =
-      "Firebase nao esta configurado. Verifique as variaveis de ambiente.";
+      "Firebase não está configurado. Verifique as variáveis de ambiente.";
     return;
   }
 
@@ -248,6 +272,7 @@ async function submit() {
         displayName: displayName.value.trim(),
       });
     }
+    await handleAuthenticatedUser(true);
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
   } finally {
@@ -260,13 +285,14 @@ async function signUpWithGoogle() {
   if (googleLoading.value || loading.value) return;
   if (!firebase?.signInWithGoogle) {
     errorMessage.value =
-      "Firebase nao esta configurado. Verifique as variaveis de ambiente.";
+      "Firebase não está configurado. Verifique as variáveis de ambiente.";
     return;
   }
 
   googleLoading.value = true;
   try {
     await firebase.signInWithGoogle();
+    await handleAuthenticatedUser(true);
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
   } finally {

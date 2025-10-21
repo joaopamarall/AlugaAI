@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  getDownloadURL,
+  ref as storageRef,
+  uploadBytes,
+} from "firebase/storage";
+import { computed, onBeforeUnmount, reactive, ref, watchEffect } from "vue";
 
 const form = reactive({
   nome: "",
@@ -9,10 +15,84 @@ const form = reactive({
   descricao: "",
 });
 
-function submit() {
-  if (!form.nome) return;
-  console.log("[itens] criar", form);
-  navigateTo("/home"); // ou /items/lista quando existir
+const imageFile = ref<File | null>(null);
+const previewUrl = ref<string | null>(null);
+const saving = ref(false);
+const errorMessage = ref("");
+const nuxtApp = useNuxtApp();
+const firebase = nuxtApp.$firebase;
+
+const hasFirebase = computed(() => Boolean(firebase?.db));
+const canSubmit = computed(
+  () => hasFirebase.value && form.nome.trim().length > 2 && !saving.value
+);
+
+function selectImage(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files && target.files.length ? target.files[0] : null;
+  imageFile.value = file;
+}
+
+watchEffect(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value);
+    previewUrl.value = null;
+  }
+  if (imageFile.value) {
+    previewUrl.value = URL.createObjectURL(imageFile.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value);
+  }
+});
+
+async function submit() {
+  errorMessage.value = "";
+  if (!canSubmit.value) return;
+  if (!firebase?.db) {
+    errorMessage.value = "Firebase não configurado. Verifique suas variáveis.";
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const itemsCollection = collection(firebase.db, "items");
+    const newDocRef = doc(itemsCollection);
+    let imageUrl: string | null = null;
+    let imagePath: string | null = null;
+
+    if (imageFile.value && firebase.storage) {
+      const safeName = imageFile.value.name.replace(/\s+/g, "-").toLowerCase();
+      imagePath = `items/${newDocRef.id}/${Date.now()}-${safeName}`;
+      const fileRef = storageRef(firebase.storage, imagePath);
+      await uploadBytes(fileRef, imageFile.value);
+      imageUrl = await getDownloadURL(fileRef);
+    }
+
+    const timestamp = serverTimestamp();
+    await setDoc(newDocRef, {
+      name: form.nome.trim(),
+      code: form.codigo.trim() || null,
+      category: form.categoria.trim() || null,
+      status: form.status,
+      description: form.descricao.trim() || null,
+      imageUrl,
+      imagePath,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    navigateTo("/admin/home");
+  } catch (error) {
+    console.error("[items] create error:", error);
+    errorMessage.value =
+      "Não foi possível salvar o item. Tente novamente em instantes.";
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
@@ -21,6 +101,9 @@ function submit() {
     <section class="card">
       <header class="mb-4">
         <h1 class="h1">Novo item</h1>
+        <p class="muted caption">
+          Cadastre um novo equipamento com status e imagem opcional.
+        </p>
       </header>
 
       <form @submit.prevent="submit" class="form-vertical" novalidate>
@@ -36,7 +119,7 @@ function submit() {
 
         <div class="row">
           <div class="col">
-            <label class="label">Código</label>
+            <label class="label">Codigo</label>
             <input
               v-model.trim="form.codigo"
               class="input"
@@ -48,7 +131,7 @@ function submit() {
             <input
               v-model.trim="form.categoria"
               class="input"
-              placeholder="Ex.: Perfuração"
+              placeholder="Ex.: Perfuracao"
             />
           </div>
         </div>
@@ -68,13 +151,39 @@ function submit() {
             v-model.trim="form.descricao"
             rows="3"
             class="input"
-            placeholder="Detalhes, potência, voltagem, acessórios..."
+            placeholder="Detalhes, potencia, voltagem, acessorios..."
           ></textarea>
         </div>
 
+        <div class="field">
+          <label class="label">Imagem do equipamento (opcional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            class="input input-file"
+            @change="selectImage"
+          />
+          <p class="hint">
+            Use imagens em formato JPG ou PNG com ate 3MB. Sera exibida no
+            catálogo.
+          </p>
+          <div v-if="previewUrl" class="preview">
+            <img :src="previewUrl" alt="Pre-visualizacao do equipamento" />
+          </div>
+        </div>
+
+        <p v-if="errorMessage" class="error-msg">{{ errorMessage }}</p>
+
         <div class="actions">
-          <button type="submit" class="btn btn-primary">Salvar</button>
-          <NuxtLink to="/home" class="btn btn-outline">Cancelar</NuxtLink>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="!canSubmit || saving"
+          >
+            <span v-if="!saving">Salvar</span>
+            <span v-else>Salvando...</span>
+          </button>
+          <NuxtLink to="/admin/home" class="btn btn-outline">Cancelar</NuxtLink>
         </div>
       </form>
     </section>
@@ -89,7 +198,7 @@ function submit() {
   justify-content: center;
   padding: 24px;
   font-family: "Roboto", ui-sans-serif, system-ui, -apple-system, Segoe UI,
-    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    Helvetica, Arial;
 }
 .card {
   width: 100%;
@@ -109,8 +218,19 @@ function submit() {
   letter-spacing: 0.2px;
   margin-top: 2px;
 }
+.muted {
+  color: rgb(var(--muted));
+}
+.caption {
+  font-size: 14px;
+}
 .label {
   font-size: 14px;
+  color: rgb(var(--muted));
+}
+.hint {
+  margin: 6px 0 0;
+  font-size: 12px;
   color: rgb(var(--muted));
 }
 
@@ -166,6 +286,11 @@ function submit() {
   box-shadow: 0 0 0 6px rgba(var(--focus-ring, 33, 150, 243), 0.14);
 }
 
+.input-file {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
 .select-reset {
   appearance: none;
   background-image: linear-gradient(
@@ -180,6 +305,21 @@ function submit() {
   background-size: 6px 6px, 6px 6px, 2.5em 2.5em;
   background-repeat: no-repeat;
   padding-right: 44px;
+}
+
+.preview {
+  display: inline-flex;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(var(--muted), 0.4);
+  background: rgb(var(--surface-2));
+  max-width: 260px;
+}
+.preview img {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .actions {
@@ -224,5 +364,10 @@ function submit() {
 }
 .btn-outline:hover {
   background: rgb(var(--surface-2));
+}
+
+.error-msg {
+  color: rgb(220, 38, 38);
+  font-size: 14px;
 }
 </style>

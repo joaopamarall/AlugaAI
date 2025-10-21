@@ -18,6 +18,7 @@ export default defineNuxtConfig({
       firebaseAppId: process.env.NUXT_PUBLIC_FIREBASE_APP_ID ?? "",
       firebaseMeasurementId:
         process.env.NUXT_PUBLIC_FIREBASE_MEASUREMENT_ID ?? "",
+      adminEmails: process.env.NUXT_PUBLIC_ADMIN_EMAILS ?? "",
     },
   },
   vite: {

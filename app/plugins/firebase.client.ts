@@ -8,10 +8,14 @@ import {
   type Auth,
   type User,
 } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
-type FirebasePlugin = {
+export type FirebasePlugin = {
   app: FirebaseApp;
   auth: Auth;
+  db: Firestore;
+  storage: FirebaseStorage;
   signInWithGoogle: () => Promise<void>;
   signOutFirebase: () => Promise<void>;
 };
@@ -47,7 +51,7 @@ export default defineNuxtPlugin((_nuxtApp) => {
 
   if (!hasMinimalConfig) {
     console.warn(
-      "[firebase] Variáveis de ambiente do Firebase não configuradas. O login ficará inoperante."
+      "[firebase] Variaveis de ambiente do Firebase nao configuradas. O login ficara inoperante."
     );
     authReady.value = true;
     return {
@@ -95,6 +99,8 @@ export default defineNuxtPlugin((_nuxtApp) => {
   const payload: FirebasePlugin = {
     app,
     auth,
+    db: getFirestore(app),
+    storage: getStorage(app),
     signInWithGoogle,
     signOutFirebase,
   };
