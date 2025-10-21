@@ -326,7 +326,7 @@ async function signUpWithGoogle() {
 }
 
 .container-app {
-  min-height: 100dvh;
+  min-height: 100vh;
   display: grid;
   grid-template-rows: 1fr auto;
   place-items: center;
@@ -360,13 +360,19 @@ async function signUpWithGoogle() {
   margin-bottom: 8px;
 }
 
+.label {
+  font-size: 14px;
+  color: rgba(15, 23, 42, 0.65);
+  font-weight: 500;
+}
+
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 48px;
   height: 48px;
   border-radius: 12px;
   background: rgb(var(--surface-2));
+  display: grid;
+  place-items: center;
   border: 1px solid rgb(var(--stroke));
   font-size: 28px;
 }
@@ -382,14 +388,16 @@ async function signUpWithGoogle() {
   transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .input::placeholder {
-  color: rgba(var(--muted), 0.9);
+  color: rgba(100, 116, 139, 0.8);
 }
+
 .input:hover {
-  background: rgb(var(--surface-2));
+  background: rgba(255, 255, 255, 0.95);
 }
+
 .input:focus {
-  border-color: rgb(var(--brand));
-  box-shadow: 0 0 0 6px rgba(var(--focus-ring), 0.14);
+  border-color: rgba(37, 99, 235, 0.7);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
 }
 .input--invalid {
   border-color: rgb(var(--danger)) !important;

@@ -3,7 +3,7 @@
     <div class="bg-app"></div>
 
     <section class="card">
-      <header class="card-head">
+      <header class="grid place-items-center text-center gap-1 mb-6">
         <div class="brand-mark">🛠️</div>
         <h1 class="h1">AlugaAI</h1>
         <p class="muted caption">Acesse sua conta</p>
@@ -251,9 +251,7 @@ async function loginWithGoogle() {
   grid-template-rows: 1fr auto;
   place-items: center;
   padding: 24px;
-  font-family: "Roboto", ui-sans-serif, system-ui, -apple-system, Segoe UI,
-    Helvetica, Arial;
-  position: relative;
+  font-family: "Roboto", sans-serif;
 }
 
 .bg-app {
@@ -276,13 +274,13 @@ async function loginWithGoogle() {
       rgba(16, 185, 129, 0.06),
       transparent 60%
     );
-  filter: blur(16px);
+  filter: blur(var(--blur));
 }
 
 .card {
   width: min(92vw, 420px);
   border-radius: 20px;
-  padding: 32px;
+  padding: 28px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.35);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.15);
@@ -291,28 +289,22 @@ async function loginWithGoogle() {
   gap: 20px;
 }
 
-.card-head {
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  text-align: center;
-}
-
 .brand-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #2563eb, #38bdf8);
-  color: #fff;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgb(var(--surface-2));
   display: grid;
   place-items: center;
-  font-weight: 800;
-  letter-spacing: 0.6px;
+  border: 1px solid rgb(var(--stroke));
+  font-size: 28px;
 }
 
 .h1 {
-  font-size: 26px;
+  font-size: 28px;
+  line-height: 1.15;
   font-weight: 700;
+  letter-spacing: 0.2px;
 }
 
 .muted {
@@ -320,7 +312,9 @@ async function loginWithGoogle() {
 }
 
 .caption {
-  font-size: 14px;
+  font-size: 16px;
+  margin-top: 12px;
+  margin-bottom: 8px;
 }
 
 .form {
