@@ -1,4 +1,10 @@
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import {
+  get,
+  ref as dbRef,
+  set,
+  update,
+} from "firebase/database";
+import type { User } from "firebase/auth";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
 import type { FirebasePlugin } from "@/plugins/firebase.client";
 
@@ -16,12 +22,20 @@ export const resetUserProfile = () => {
   profileReady.value = false;
 };
 
-const emailMatchesAdmin = (email: string | null | undefined, adminList: string[]): boolean => {
+const emailMatchesAdmin = (
+  email: string | null | undefined,
+  adminList: string[]
+): boolean => {
   if (!email) return false;
   return adminList.includes(email.trim().toLowerCase());
 };
 
-export const ensureUserProfile = async (options?: { force?: boolean }) => {
+type EnsureOptions = {
+  force?: boolean;
+  authUser?: User | null;
+};
+
+export const ensureUserProfile = async (options?: EnsureOptions) => {
   const { role, profileReady } = useUserProfile();
   if (profileReady.value && !options?.force) {
     return;
@@ -33,8 +47,9 @@ export const ensureUserProfile = async (options?: { force?: boolean }) => {
   const nuxtApp = useNuxtApp();
   const firebase = nuxtApp.$firebase as FirebasePlugin | null | undefined;
   const { user } = useFirebaseUser();
+  const authUser = options?.authUser ?? user.value;
 
-  if (!firebase?.db || !user.value) {
+  if (!firebase?.database || !authUser) {
     role.value = null;
     profileReady.value = true;
     return;
@@ -47,53 +62,54 @@ export const ensureUserProfile = async (options?: { force?: boolean }) => {
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 
-  let resolvedRole: "admin" | "client" = emailMatchesAdmin(
-    user.value.email,
-    adminEmails
-  )
-    ? "admin"
-    : "client";
+  const defaultIsAdmin = emailMatchesAdmin(authUser.email, adminEmails);
+  let resolvedRole: UserRole = defaultIsAdmin ? "admin" : "client";
 
   try {
-    const userRef = doc(firebase.db, "users", user.value.uid);
-    const snapshot = await getDoc(userRef);
+    const userRef = dbRef(firebase.database, `users/${authUser.uid}`);
+    const snapshot = await get(userRef);
 
     if (!snapshot.exists()) {
-      await setDoc(userRef, {
-        uid: user.value.uid,
+      const nowIso = new Date().toISOString();
+      await set(userRef, {
+        uid: authUser.uid,
         role: resolvedRole,
-        email: user.value.email ?? null,
-        displayName: user.value.displayName ?? null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        email: authUser.email ?? null,
+        displayName: authUser.displayName ?? null,
+        isAdmin: defaultIsAdmin,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       });
     } else {
-      const data = snapshot.data() as Record<string, unknown>;
-      const storedRole =
-        data.role === "admin" || data.role === "client" ? data.role : null;
-
-      if (storedRole) {
-        resolvedRole = storedRole;
-      } else if (resolvedRole === "admin") {
-        await updateDoc(userRef, {
-          role: resolvedRole,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
+      const data = snapshot.val() as Record<string, unknown>;
       const updates: Record<string, unknown> = {};
-      if (
-        user.value.displayName &&
-        user.value.displayName !== data.displayName
-      ) {
-        updates.displayName = user.value.displayName;
+
+      const storedIsAdmin =
+        typeof data.isAdmin === "boolean" ? data.isAdmin : defaultIsAdmin;
+
+      if (typeof storedIsAdmin === "boolean") {
+        resolvedRole = storedIsAdmin ? "admin" : "client";
+        if (data.isAdmin !== storedIsAdmin) {
+          updates.isAdmin = storedIsAdmin;
+        }
       }
-      if (user.value.email && user.value.email !== data.email) {
-        updates.email = user.value.email;
+
+      if (data.role !== resolvedRole) {
+        updates.role = resolvedRole;
+      }
+
+      if (
+        authUser.displayName &&
+        authUser.displayName !== data.displayName
+      ) {
+        updates.displayName = authUser.displayName;
+      }
+      if (authUser.email && authUser.email !== data.email) {
+        updates.email = authUser.email;
       }
       if (Object.keys(updates).length > 0) {
-        updates.updatedAt = serverTimestamp();
-        await updateDoc(userRef, updates);
+        updates.updatedAt = new Date().toISOString();
+        await update(userRef, updates);
       }
     }
 
@@ -105,3 +121,4 @@ export const ensureUserProfile = async (options?: { force?: boolean }) => {
     profileReady.value = true;
   }
 };
+

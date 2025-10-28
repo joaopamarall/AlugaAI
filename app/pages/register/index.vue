@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+import { useNuxtApp, useRoute, navigateTo } from "#app";
 import { computed, onMounted, ref, watch } from "vue";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import type { FirebaseError } from "firebase/app";
@@ -167,7 +168,6 @@ const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
 const { user: currentUser } = useFirebaseUser();
 const { role } = useUserProfile();
-
 const displayName = ref("");
 const email = ref("");
 const password = ref("");
@@ -229,24 +229,33 @@ function formatFirebaseError(err: unknown): string {
       return "Falha de rede ao comunicar com o Firebase. Tente novamente em instantes.";
     case "auth/popup-closed-by-user":
       return "Cadastro cancelado antes de finalizar.";
+    case "PERMISSION_DENIED":
+    case "database/permission-denied":
+      return "Sem permissao para salvar seus dados. Verifique as regras do Realtime Database.";
     default:
       return "Não foi possível concluir o cadastro. Tente novamente em instantes.";
   }
 }
 
 async function handleAuthenticatedUser(force = false) {
-  if (!currentUser.value || redirecting.value) return;
+  if (redirecting.value) return;
   if (!firebase?.auth) return;
+
+  const authUser = firebase.auth.currentUser ?? currentUser.value;
+  if (!authUser) return;
+  if (!currentUser.value) {
+    currentUser.value = authUser;
+  }
 
   redirecting.value = true;
   try {
-    await ensureUserProfile({ force });
-    const destination = role.value === "admin" ? "/admin/home" : "/app/catalog";
-    await navigateTo(destination);
+    await ensureUserProfile({ force, authUser });
   } catch (error) {
     console.error("[register] redirect error:", error);
   } finally {
     redirecting.value = false;
+    const destination = role.value === "admin" ? "/admin/home" : "/app/catalog";
+    navigateTo(destination, { replace: true });
   }
 }
 
@@ -267,6 +276,9 @@ async function submit() {
       email.value,
       password.value
     );
+    if (!currentUser.value) {
+      currentUser.value = credential.user;
+    }
     if (credential.user && validName.value) {
       await updateProfile(credential.user, {
         displayName: displayName.value.trim(),
@@ -292,6 +304,9 @@ async function signUpWithGoogle() {
   googleLoading.value = true;
   try {
     await firebase.signInWithGoogle();
+    if (!currentUser.value && firebase.auth.currentUser) {
+      currentUser.value = firebase.auth.currentUser;
+    }
     await handleAuthenticatedUser(true);
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
@@ -501,3 +516,5 @@ async function signUpWithGoogle() {
   color: rgb(var(--brand-strong));
 }
 </style>
+
+

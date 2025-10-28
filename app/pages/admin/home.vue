@@ -162,18 +162,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  Timestamp,
-  where,
-  type Unsubscribe,
-} from "firebase/firestore";
+import { onValue, ref as dbRef } from "firebase/database";
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
 import { resetUserProfile } from "@/composables/useUserProfile";
+
+type Unsubscribe = () => void;
 
 const q = ref("");
 
@@ -230,47 +224,41 @@ const unsubscribers: Unsubscribe[] = [];
 const loadedFlags = reactive({ rentals: false, items: false });
 
 onMounted(() => {
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     dataError.value =
-      "Firebase não configurado. Defina as variáveis de ambiente para carregar o painel.";
+      "Firebase nao configurado. Defina as variaveis de ambiente para carregar o painel.";
     dashboardLoading.value = false;
     return;
   }
 
-  const rentalsQuery = query(
-    collection(firebase.db, "rentals"),
-    where("status", "==", "open"),
-    orderBy("startDate", "asc")
-  );
-  const rentalsStop = onSnapshot(
-    rentalsQuery,
+  const rentalsRef = dbRef(firebase.database, "rentals");
+  const stopRentals = onValue(
+    rentalsRef,
     (snapshot) => {
-      activeRentals.value = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Record<string, unknown>;
-        const start =
-          data.startDate instanceof Timestamp
-            ? data.startDate.toDate()
-            : new Date(String(data.startDate ?? ""));
-        const expected =
-          data.expectedReturnDate instanceof Timestamp
-            ? data.expectedReturnDate.toDate()
-            : new Date(String(data.expectedReturnDate ?? ""));
-        return {
-          id: docSnap.id,
-          itemName: String(data.itemName ?? "Sem nome"),
-          lessee: String(data.lessee ?? "não informado"),
-          startDate: !Number.isNaN(start.getTime())
-            ? start.toISOString()
-            : new Date().toISOString(),
-          expectedReturnDate: !Number.isNaN(expected.getTime())
-            ? expected.toISOString()
-            : new Date().toISOString(),
-          status:
-            data.status === "closed" || data.status === "open"
-              ? (data.status as "open" | "closed")
-              : "open",
-        };
-      });
+      const payload = snapshot.val() as Record<string, unknown> | null;
+      const rentals = payload
+        ? Object.entries(payload).map(([id, raw]) => {
+            const data = (raw ?? {}) as Record<string, unknown>;
+            return {
+              id,
+              itemName: String(data.itemName ?? "Sem nome"),
+              lessee: String(data.lessee ?? "nao informado"),
+              startDate: toIso(data.startDate) ?? new Date().toISOString(),
+              expectedReturnDate:
+                toIso(data.expectedReturnDate) ?? new Date().toISOString(),
+              status:
+                data.status === "closed" || data.status === "open"
+                  ? (data.status as "open" | "closed")
+                  : "open",
+            };
+          })
+        : [];
+      activeRentals.value = rentals
+        .filter((entry) => entry.status === "open")
+        .sort(
+          (a, b) =>
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+        );
       kpi.active = activeRentals.value.length;
       kpi.late = activeRentals.value.filter((r) =>
         isLate(r.expectedReturnDate)
@@ -281,39 +269,40 @@ onMounted(() => {
       }
     },
     (error) => {
-      console.error("[home] rentals snapshot error:", error);
-      dataError.value = "Erro ao carregar locações. Tente atualizar a página.";
+      console.error("[home] rentals listener error:", error);
+      dataError.value = "Erro ao carregar locacoes. Tente atualizar a pagina.";
       dashboardLoading.value = false;
     }
   );
-  unsubscribers.push(rentalsStop);
+  unsubscribers.push(stopRentals);
 
-  const itemsQuery = query(collection(firebase.db, "items"));
-  const itemsStop = onSnapshot(
-    itemsQuery,
+  const itemsRef = dbRef(firebase.database, "items");
+  const stopItems = onValue(
+    itemsRef,
     (snapshot) => {
-      const items = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Record<string, unknown>;
-        const status =
-          data.status === "available" ||
-          data.status === "rented" ||
-          data.status === "maintenance"
-            ? (data.status as Item["status"])
-            : "available";
-        return {
-          id: docSnap.id,
-          name: String(data.name ?? "Sem nome"),
-          category: data.category ? String(data.category) : null,
-          status,
-          imageUrl: data.imageUrl ? String(data.imageUrl) : null,
-        };
-      });
+      const payload = snapshot.val() as Record<string, unknown> | null;
+      const items = payload
+        ? Object.entries(payload).map(([id, raw]) => {
+            const data = (raw ?? {}) as Record<string, unknown>;
+            const status =
+              data.status === "available" ||
+              data.status === "rented" ||
+              data.status === "maintenance"
+                ? (data.status as Item["status"])
+                : "available";
+            return {
+              id,
+              name: String(data.name ?? "Sem nome"),
+              category: data.category ? String(data.category) : null,
+              status,
+              imageUrl: data.imageUrl ? String(data.imageUrl) : null,
+            };
+          })
+        : [];
       maintenanceItems.value = items.filter(
         (item) => item.status === "maintenance"
       );
-      kpi.available = items.filter(
-        (item) => item.status === "available"
-      ).length;
+      kpi.available = items.filter((item) => item.status === "available").length;
       kpi.late = activeRentals.value.filter((r) =>
         isLate(r.expectedReturnDate)
       ).length;
@@ -323,12 +312,12 @@ onMounted(() => {
       }
     },
     (error) => {
-      console.error("[home] items snapshot error:", error);
-      dataError.value = "Erro ao carregar os itens. Tente atualizar a página.";
+      console.error("[home] items listener error:", error);
+      dataError.value = "Erro ao carregar os itens. Tente atualizar a pagina.";
       dashboardLoading.value = false;
     }
   );
-  unsubscribers.push(itemsStop);
+  unsubscribers.push(stopItems);
 });
 
 onBeforeUnmount(() => {
@@ -341,7 +330,7 @@ async function logout() {
 
   if (!firebase?.signOutFirebase) {
     signOutError.value =
-      "Firebase não está disponível no momento. Atualize a página.";
+      "Firebase nao esta disponivel no momento. Atualize a pagina.";
     return;
   }
 
@@ -353,7 +342,7 @@ async function logout() {
   } catch (error) {
     console.error("[home] signOut error:", error);
     signOutError.value =
-      "não foi possivel encerrar a sessão. Tente novamente em instantes.";
+      "Nao foi possivel encerrar a sessao. Tente novamente em instantes.";
   } finally {
     signingOut.value = false;
   }
@@ -371,6 +360,16 @@ function isLate(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return false;
   return date.getTime() < Date.now();
+}
+
+function toIso(value: unknown): string | null {
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  }
+  return null;
 }
 </script>
 
@@ -746,3 +745,4 @@ function isLate(iso: string) {
   border-radius: 12px;
 }
 </style>
+

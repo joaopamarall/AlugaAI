@@ -25,6 +25,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo("/login");
   }
 
+  if (!firebase?.database) {
+    console.warn(
+      "[auth] Firebase Realtime Database nao configurado. Redirecionando para a pagina de login."
+    );
+    return navigateTo("/login");
+  }
+
   await waitForAuthReady();
   const { user } = useFirebaseUser();
 
@@ -33,7 +40,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo("/login");
   }
 
-  await ensureUserProfile();
+  await ensureUserProfile({ force: true, authUser: user.value });
   const { role } = useUserProfile();
 
   if (to.path.startsWith(ADMIN_PREFIX)) {
@@ -49,3 +56,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 });
+
+

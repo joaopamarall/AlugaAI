@@ -176,17 +176,15 @@
 
 <script setup lang="ts">
 import {
-  collection,
-  doc,
-  onSnapshot,
+  equalTo,
+  onValue,
+  orderByChild,
+  push,
   query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from "firebase/firestore";
+  ref as dbRef,
+  set,
+  update,
+} from "firebase/database";
 import {
   computed,
   onBeforeUnmount,
@@ -197,6 +195,8 @@ import {
 } from "vue";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
 import { resetUserProfile } from "@/composables/useUserProfile";
+
+type Unsubscribe = () => void;
 
 type Item = {
   id: string;
@@ -289,9 +289,9 @@ const unsubscribers: Unsubscribe[] = [];
 let rentalsStop: Unsubscribe | null = null;
 
 onMounted(() => {
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     const message =
-      "Firebase não está configurado. Atualize as variáveis de ambiente.";
+      "Firebase nao esta configurado. Atualize as variaveis de ambiente.";
     itemsError.value = message;
     rentalsError.value = message;
     loadingItems.value = false;
@@ -299,30 +299,32 @@ onMounted(() => {
     return;
   }
 
-  const itemsQuery = query(
-    collection(firebase.db, "items"),
-    where("status", "==", "available")
-  );
-  const stopItems = onSnapshot(
+  const itemsRef = dbRef(firebase.database, "items");
+  const itemsQuery = query(itemsRef, orderByChild("status"), equalTo("available"));
+  const stopItems = onValue(
     itemsQuery,
     (snapshot) => {
-      items.value = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Record<string, unknown>;
-        return {
-          id: docSnap.id,
-          name: String(data.name ?? "Sem nome"),
-          category: data.category ? String(data.category) : null,
-          description: data.description ? String(data.description) : null,
-          imageUrl: data.imageUrl ? String(data.imageUrl) : null,
-        };
-      });
+      const payload = snapshot.val() as Record<string, unknown> | null;
+      const list = payload
+        ? Object.entries(payload).map(([id, raw]) => {
+            const data = (raw ?? {}) as Record<string, unknown>;
+            return {
+              id,
+              name: String(data.name ?? "Sem nome"),
+              category: data.category ? String(data.category) : null,
+              description: data.description ? String(data.description) : null,
+              imageUrl: data.imageUrl ? String(data.imageUrl) : null,
+            } as Item;
+          })
+        : [];
+      items.value = list;
       loadingItems.value = false;
       itemsError.value = "";
     },
     (error) => {
-      console.error("[catalog] items snapshot error:", error);
+      console.error("[catalog] items listener error:", error);
       itemsError.value =
-        "Não foi possível carregar os itens. Tente novamente em instantes.";
+        "Nao foi possivel carregar os itens. Tente novamente em instantes.";
       loadingItems.value = false;
     }
   );
@@ -332,7 +334,7 @@ onMounted(() => {
 watch(
   () => user.value?.uid,
   (uid) => {
-    if (!firebase?.db) return;
+    if (!firebase?.database) return;
 
     if (rentalsStop) {
       rentalsStop();
@@ -346,39 +348,33 @@ watch(
     }
 
     loadingRentals.value = true;
+    const rentalsRef = dbRef(firebase.database, "rentals");
     const rentalsQuery = query(
-      collection(firebase.db, "rentals"),
-      where("lesseeId", "==", uid)
+      rentalsRef,
+      orderByChild("lesseeId"),
+      equalTo(uid)
     );
-    rentalsStop = onSnapshot(
+    rentalsStop = onValue(
       rentalsQuery,
       (snapshot) => {
-        activeRentals.value = snapshot.docs
-          .map((docSnap) => {
-            const data = docSnap.data() as Record<string, unknown>;
-            const rawStart = data.startDate;
-            const rawEnd = data.expectedReturnDate;
-            const start =
-              rawStart instanceof Timestamp
-                ? rawStart.toDate()
-                : new Date(String(rawStart ?? ""));
-            const end =
-              rawEnd instanceof Timestamp
-                ? rawEnd.toDate()
-                : new Date(String(rawEnd ?? ""));
-            return {
-              id: docSnap.id,
-              itemId: String(data.itemId ?? ""),
-              itemName: String(data.itemName ?? "Sem nome"),
-              startDate: Number.isNaN(start.getTime())
-                ? new Date().toISOString()
-                : start.toISOString(),
-              expectedReturnDate: Number.isNaN(end.getTime())
-                ? new Date().toISOString()
-                : end.toISOString(),
-              status: String(data.status ?? "open"),
-            } as Rental;
-          })
+        const payload = snapshot.val() as Record<string, unknown> | null;
+        const list = payload
+          ? Object.entries(payload).map(([id, raw]) => {
+              const data = (raw ?? {}) as Record<string, unknown>;
+              const startIso = toIso(data.startDate) ?? new Date().toISOString();
+              const endIso =
+                toIso(data.expectedReturnDate) ?? new Date().toISOString();
+              return {
+                id,
+                itemId: String(data.itemId ?? ""),
+                itemName: String(data.itemName ?? "Sem nome"),
+                startDate: startIso,
+                expectedReturnDate: endIso,
+                status: String(data.status ?? "open"),
+              } as Rental;
+            })
+          : [];
+        activeRentals.value = list
           .filter((rental) => rental.status !== "closed")
           .sort((a, b) => {
             return (
@@ -389,9 +385,9 @@ watch(
         rentalsError.value = "";
       },
       (error) => {
-        console.error("[catalog] rentals snapshot error:", error);
+        console.error("[catalog] rentals listener error:", error);
         rentalsError.value =
-          "Não foi possivel carregar suas locações. Atualize a pagina.";
+          "Nao foi possivel carregar suas locacoes. Atualize a pagina.";
         loadingRentals.value = false;
       }
     );
@@ -432,13 +428,13 @@ function closeRent() {
 
 async function submitRental() {
   formError.value = "";
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     formError.value =
-      "Firebase não está configurado. Verifique as variáveis de ambiente.";
+      "Firebase nao esta configurado. Verifique as variaveis de ambiente.";
     return;
   }
   if (!user.value) {
-    formError.value = "Sessão expirada. Entre novamente para continuar.";
+    formError.value = "Sessao expirada. Entre novamente para continuar.";
     return;
   }
   if (!selectedItem.value) {
@@ -449,20 +445,27 @@ async function submitRental() {
   const start = new Date(rentForm.start);
   const end = new Date(rentForm.end);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    formError.value = "Informe datas válidas.";
+    formError.value = "Informe datas validas.";
     return;
   }
   if (start >= end) {
     formError.value =
-      "A data de devolução deve ser maior do que a data de início.";
+      "A data de devolucao deve ser maior do que a data de inicio.";
     return;
   }
 
   saving.value = true;
   try {
-    const rentalsCollection = collection(firebase.db, "rentals");
-    const rentalRef = doc(rentalsCollection);
-    await setDoc(rentalRef, {
+    const rentalsRef = dbRef(firebase.database, "rentals");
+    const rentalRef = push(rentalsRef);
+    const rentalId = rentalRef.key;
+    if (!rentalId) {
+      throw new Error("Falha ao gerar identificador da locacao.");
+    }
+
+    const nowIso = new Date().toISOString();
+    await set(rentalRef, {
+      id: rentalId,
       itemId: selectedItem.value.id,
       itemName: selectedItem.value.name,
       itemCategory: selectedItem.value.category,
@@ -471,25 +474,25 @@ async function submitRental() {
       lesseeName: userName.value,
       lesseeEmail: userEmail.value || null,
       notes: rentForm.notes.trim() || null,
-      startDate: Timestamp.fromDate(start),
-      expectedReturnDate: Timestamp.fromDate(end),
+      startDate: start.toISOString(),
+      expectedReturnDate: end.toISOString(),
       status: "open",
       createdBy: "client",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     });
 
-    await updateDoc(doc(firebase.db, "items", selectedItem.value.id), {
+    await update(dbRef(firebase.database, `items/${selectedItem.value.id}`), {
       status: "rented",
-      updatedAt: serverTimestamp(),
+      updatedAt: nowIso,
     });
 
-    setSuccess("Locação criada com sucesso!");
+    setSuccess("Locacao criada com sucesso!");
     closeRent();
   } catch (error) {
     console.error("[catalog] submit rental error:", error);
     formError.value =
-      "Não foi possível criar a locação. Tente novamente em instantes.";
+      "Nao foi possivel criar a locacao. Tente novamente em instantes.";
   } finally {
     saving.value = false;
   }
@@ -500,7 +503,7 @@ async function signOut() {
   if (signingOut.value) return;
   if (!firebase?.signOutFirebase) {
     signOutError.value =
-      "Firebase não está disponível no momento. Atualize a pagina.";
+      "Firebase nao esta disponivel no momento. Atualize a pagina.";
     return;
   }
 
@@ -512,7 +515,7 @@ async function signOut() {
   } catch (error) {
     console.error("[catalog] signOut error:", error);
     signOutError.value =
-      "Não foi possível encerrar a sessão. Tente novamente em instantes.";
+      "Nao foi possivel encerrar a sessao. Tente novamente em instantes.";
   } finally {
     signingOut.value = false;
   }
@@ -524,6 +527,16 @@ function formatDateTime(iso: string) {
     return "--/--/---- --:--";
   }
   return date.toLocaleString();
+}
+
+function toIso(value: unknown): string | null {
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  }
+  return null;
 }
 </script>
 
@@ -915,3 +928,4 @@ function formatDateTime(iso: string) {
   padding-top: 8px;
 }
 </style>
+

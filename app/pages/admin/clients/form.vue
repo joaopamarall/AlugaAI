@@ -4,7 +4,7 @@
       <header class="card-head">
         <h1 class="h1">Adicionar novo cliente</h1>
         <p class="subtitle">
-          Cadastre dados essenciais para clientes que ainda nao possuem conta na
+          Cadastre dados essenciais para clientes que ainda não possuem conta na
           plataforma.
         </p>
       </header>
@@ -155,18 +155,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  addDoc,
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  type DocumentData,
-  type Unsubscribe,
-} from "firebase/firestore";
+import { onValue, push, ref as dbRef, set } from "firebase/database";
 import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
+
+type Unsubscribe = () => void;
 
 const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
@@ -194,6 +187,7 @@ const users = ref<
     createdAt: Date | null;
   }>
 >([]);
+
 const clients = ref<
   Array<{
     id: string;
@@ -213,7 +207,7 @@ const clientsError = ref("");
 const unsubscribers: Unsubscribe[] = [];
 
 onMounted(() => {
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     const message =
       "Firebase não configurado. Verifique as variáveis de ambiente.";
     errorMessage.value = message;
@@ -224,23 +218,27 @@ onMounted(() => {
     return;
   }
 
-  const usersQuery = query(
-    collection(firebase.db, "users"),
-    orderBy("displayName", "asc")
-  );
-  const stopUsers = onSnapshot(
-    usersQuery,
+  const usersRef = dbRef(firebase.database, "users");
+  const stopUsers = onValue(
+    usersRef,
     (snapshot) => {
-      users.value = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as DocumentData;
-        const createdAt = data.createdAt?.toDate?.() ?? null;
-        return {
-          id: docSnap.id,
-          displayName: data.displayName ? String(data.displayName) : null,
-          email: data.email ? String(data.email) : null,
-          role: data.role ? String(data.role) : null,
-          createdAt,
-        };
+      const payload = snapshot.val() as Record<string, unknown> | null;
+      const list = payload
+        ? Object.entries(payload).map(([id, raw]) => {
+            const data = (raw ?? {}) as Record<string, unknown>;
+            return {
+              id,
+              displayName: data.displayName ? String(data.displayName) : null,
+              email: data.email ? String(data.email) : null,
+              role: data.role ? String(data.role) : null,
+              createdAt: toDate(data.createdAt),
+            };
+          })
+        : [];
+      users.value = list.sort((a, b) => {
+        const current = a.displayName ?? a.email ?? "";
+        const next = b.displayName ?? b.email ?? "";
+        return current.localeCompare(next, "pt-BR");
       });
       loadingUsers.value = false;
       usersError.value = "";
@@ -253,24 +251,28 @@ onMounted(() => {
   );
   unsubscribers.push(stopUsers);
 
-  const clientsQuery = query(
-    collection(firebase.db, "clients"),
-    orderBy("createdAt", "desc")
-  );
-  const stopClients = onSnapshot(
-    clientsQuery,
+  const clientsRef = dbRef(firebase.database, "clients");
+  const stopClients = onValue(
+    clientsRef,
     (snapshot) => {
-      clients.value = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as DocumentData;
-        const createdAt = data.createdAt?.toDate?.() ?? null;
-        return {
-          id: docSnap.id,
-          nome: String(data.nome ?? ""),
-          email: data.email ? String(data.email) : null,
-          telefone: data.telefone ? String(data.telefone) : null,
-          documento: String(data.documento ?? ""),
-          createdAt,
-        };
+      const payload = snapshot.val() as Record<string, unknown> | null;
+      const list = payload
+        ? Object.entries(payload).map(([id, raw]) => {
+            const data = (raw ?? {}) as Record<string, unknown>;
+            return {
+              id,
+              nome: String(data.nome ?? ""),
+              email: data.email ? String(data.email) : null,
+              telefone: data.telefone ? String(data.telefone) : null,
+              documento: String(data.documento ?? ""),
+              createdAt: toDate(data.createdAt),
+            };
+          })
+        : [];
+      clients.value = list.sort((a, b) => {
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
       });
       loadingClients.value = false;
       clientsError.value = "";
@@ -318,20 +320,22 @@ async function submit() {
     errorMessage.value = "Preencha os campos obrigatórios.";
     return;
   }
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     errorMessage.value = "Firebase não configurado.";
     return;
   }
 
   saving.value = true;
   try {
-    await addDoc(collection(firebase.db, "clients"), {
+    const clientsRef = dbRef(firebase.database, "clients");
+    const newClientRef = push(clientsRef);
+    await set(newClientRef, {
       nome: form.nome.trim(),
       email: form.email.trim(),
       telefone: form.telefone.trim() || null,
       documento: form.documento.trim(),
       endereco: form.endereco.trim() || null,
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
       createdBy: currentUser.value?.uid ?? null,
     });
 
@@ -339,7 +343,7 @@ async function submit() {
     resetForm();
   } catch (error) {
     console.error("[clients] add client error:", error);
-    errorMessage.value = "Não foi possível salvar o cliente.";
+    errorMessage.value = "N�o foi poss�vel salvar o cliente.";
   } finally {
     saving.value = false;
   }
@@ -348,6 +352,18 @@ async function submit() {
 function formatDate(date: Date | null) {
   if (!date) return "-";
   return date.toLocaleDateString();
+}
+
+function toDate(value: unknown): Date | null {
+  if (typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
 }
 </script>
 

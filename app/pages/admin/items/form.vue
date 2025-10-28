@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { push, ref as dbRef, set } from "firebase/database";
 import {
   getDownloadURL,
   ref as storageRef,
@@ -22,7 +22,7 @@ const errorMessage = ref("");
 const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
 
-const hasFirebase = computed(() => Boolean(firebase?.db));
+const hasFirebase = computed(() => Boolean(firebase?.database));
 const canSubmit = computed(
   () => hasFirebase.value && form.nome.trim().length > 2 && !saving.value
 );
@@ -52,28 +52,33 @@ onBeforeUnmount(() => {
 async function submit() {
   errorMessage.value = "";
   if (!canSubmit.value) return;
-  if (!firebase?.db) {
-    errorMessage.value = "Firebase não configurado. Verifique suas variáveis.";
+  if (!firebase?.database) {
+    errorMessage.value = "Firebase nao configurado. Verifique suas variaveis.";
     return;
   }
 
   saving.value = true;
   try {
-    const itemsCollection = collection(firebase.db, "items");
-    const newDocRef = doc(itemsCollection);
+    const itemsRef = dbRef(firebase.database, "items");
+    const newItemRef = push(itemsRef);
+    const itemId = newItemRef.key;
+    if (!itemId) {
+      throw new Error("Falha ao gerar identificador do item.");
+    }
     let imageUrl: string | null = null;
     let imagePath: string | null = null;
 
     if (imageFile.value && firebase.storage) {
       const safeName = imageFile.value.name.replace(/\s+/g, "-").toLowerCase();
-      imagePath = `items/${newDocRef.id}/${Date.now()}-${safeName}`;
+      imagePath = `items/${itemId}/${Date.now()}-${safeName}`;
       const fileRef = storageRef(firebase.storage, imagePath);
       await uploadBytes(fileRef, imageFile.value);
       imageUrl = await getDownloadURL(fileRef);
     }
 
-    const timestamp = serverTimestamp();
-    await setDoc(newDocRef, {
+    const nowIso = new Date().toISOString();
+    await set(newItemRef, {
+      id: itemId,
       name: form.nome.trim(),
       code: form.codigo.trim() || null,
       category: form.categoria.trim() || null,
@@ -81,15 +86,15 @@ async function submit() {
       description: form.descricao.trim() || null,
       imageUrl,
       imagePath,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      createdAt: nowIso,
+      updatedAt: nowIso,
     });
 
     navigateTo("/admin/home");
   } catch (error) {
     console.error("[items] create error:", error);
     errorMessage.value =
-      "Não foi possível salvar o item. Tente novamente em instantes.";
+      "Nao foi possivel salvar o item. Tente novamente em instantes.";
   } finally {
     saving.value = false;
   }

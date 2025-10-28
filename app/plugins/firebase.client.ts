@@ -8,22 +8,19 @@ import {
   type Auth,
   type User,
 } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { getDatabase, type Database } from "firebase/database";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 export type FirebasePlugin = {
   app: FirebaseApp;
   auth: Auth;
-  db: Firestore;
+  database: Database;
   storage: FirebaseStorage;
   signInWithGoogle: () => Promise<void>;
   signOutFirebase: () => Promise<void>;
 };
 
 export default defineNuxtPlugin((_nuxtApp) => {
-  if (process.server) {
-    return;
-  }
 
   const config = useRuntimeConfig();
   const firebaseConfig = {
@@ -34,6 +31,7 @@ export default defineNuxtPlugin((_nuxtApp) => {
     messagingSenderId: config.public.firebaseMessagingSenderId,
     appId: config.public.firebaseAppId,
     measurementId: config.public.firebaseMeasurementId,
+    databaseURL: config.public.firebaseDatabaseUrl,
   };
 
   const currentUser = useState<User | null>("firebaseUser", () => null);
@@ -47,7 +45,8 @@ export default defineNuxtPlugin((_nuxtApp) => {
     firebaseConfig.apiKey &&
     firebaseConfig.authDomain &&
     firebaseConfig.projectId &&
-    firebaseConfig.appId;
+    firebaseConfig.appId &&
+    firebaseConfig.databaseURL;
 
   if (!hasMinimalConfig) {
     console.warn(
@@ -63,6 +62,7 @@ export default defineNuxtPlugin((_nuxtApp) => {
   }
 
   const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
   const auth = getAuth(app);
   auth.useDeviceLanguage();
   currentUser.value = auth.currentUser;
@@ -99,7 +99,7 @@ export default defineNuxtPlugin((_nuxtApp) => {
   const payload: FirebasePlugin = {
     app,
     auth,
-    db: getFirestore(app),
+    database: getDatabase(app),
     storage: getStorage(app),
     signInWithGoogle,
     signOutFirebase,
@@ -112,3 +112,5 @@ export default defineNuxtPlugin((_nuxtApp) => {
     },
   };
 });
+
+

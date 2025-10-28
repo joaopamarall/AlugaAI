@@ -108,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+import { useNuxtApp, useRoute, navigateTo } from "#app";
 import { computed, onMounted, ref, watch } from "vue";
 import {
   browserLocalPersistence,
@@ -126,9 +127,9 @@ import {
 
 const nuxtApp = useNuxtApp();
 const firebase = nuxtApp.$firebase;
+const route = useRoute();
 const { user: currentUser } = useFirebaseUser();
 const { role } = useUserProfile();
-
 const email = ref("");
 const password = ref("");
 const remember = ref(true);
@@ -173,6 +174,9 @@ function formatFirebaseError(err: unknown): string {
       return "Usuário não encontrado.";
     case "auth/popup-closed-by-user":
       return "Login cancelado antes de finalizar.";
+    case "PERMISSION_DENIED":
+    case "database/permission-denied":
+      return "Sem permissao para carregar seus dados. Verifique as regras do Realtime Database.";
     case "auth/network-request-failed":
       return "Falha de rede ao comunicar com o Firebase. Tente novamente em instantes.";
     default:
@@ -181,16 +185,25 @@ function formatFirebaseError(err: unknown): string {
 }
 
 async function handleAuthenticatedUser(force = false) {
-  if (!currentUser.value || redirecting.value) return;
+  if (redirecting.value) return;
   if (!firebase?.auth) return;
+
+  const authUser = firebase.auth.currentUser ?? currentUser.value;
+  if (!authUser) return;
+  if (!currentUser.value) {
+    currentUser.value = authUser;
+  }
 
   redirecting.value = true;
   try {
-    await ensureUserProfile({ force });
+    await ensureUserProfile({ force, authUser });
     const destination = role.value === "admin" ? "/admin/home" : "/app/catalog";
-    await navigateTo(destination);
+    await navigateTo(destination, { replace: true });
   } catch (error) {
     console.error("[login] redirect error:", error);
+    if (route.path !== "/app/catalog") {
+      await navigateTo("/app/catalog", { replace: true });
+    }
   } finally {
     redirecting.value = false;
   }
@@ -212,11 +225,15 @@ async function submit() {
       firebase.auth,
       remember.value ? browserLocalPersistence : browserSessionPersistence
     );
-    await signInWithEmailAndPassword(
+    const credential = await signInWithEmailAndPassword(
       firebase.auth,
       email.value,
       password.value
     );
+    if (!currentUser.value) {
+      currentUser.value = credential.user;
+    }
+    await handleAuthenticatedUser(true);
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
   } finally {
@@ -236,6 +253,10 @@ async function loginWithGoogle() {
   googleLoading.value = true;
   try {
     await firebase.signInWithGoogle();
+    if (!currentUser.value && firebase.auth.currentUser) {
+      currentUser.value = firebase.auth.currentUser;
+    }
+    await handleAuthenticatedUser(true);
   } catch (error) {
     errorMessage.value = formatFirebaseError(error);
   } finally {
@@ -503,3 +524,5 @@ async function loginWithGoogle() {
   font-size: 13px;
 }
 </style>
+
+

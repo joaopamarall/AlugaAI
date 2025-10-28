@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import {
-  collection,
-  doc,
-  getDocs,
+  equalTo,
+  get,
+  orderByChild,
+  push,
   query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+  ref as dbRef,
+  set,
+  update,
+} from "firebase/database";
 import { computed, onMounted, reactive, ref } from "vue";
 
 type ItemOption = {
@@ -34,7 +33,7 @@ const loadingItems = ref(false);
 const loading = ref(false);
 const errorMessage = ref("");
 
-const hasFirebase = computed(() => Boolean(firebase?.db));
+const hasFirebase = computed(() => Boolean(firebase?.database));
 const canSubmit = computed(() => {
   if (!hasFirebase.value || loading.value) return false;
   return (
@@ -51,35 +50,44 @@ onMounted(async () => {
 
 async function fetchItems() {
   errorMessage.value = "";
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     errorMessage.value =
-      "Firebase não configurado. Defina as variáveis de ambiente.";
+      "Firebase nao configurado. Defina as variaveis de ambiente.";
     return;
   }
   loadingItems.value = true;
   try {
+    const itemsRef = dbRef(firebase.database, "items");
     const availableQuery = query(
-      collection(firebase.db, "items"),
-      where("status", "==", "available")
+      itemsRef,
+      orderByChild("status"),
+      equalTo("available")
     );
-    const snapshot = await getDocs(availableQuery);
-    items.value = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Record<string, unknown>;
-      return {
-        id: docSnap.id,
-        name: String(data.name ?? "Sem nome"),
-        category: data.category ? String(data.category) : null,
-        imageUrl: data.imageUrl ? String(data.imageUrl) : null,
-      };
-    });
+    const snapshot = await get(availableQuery);
+    const payload = snapshot.exists()
+      ? (snapshot.val() as Record<string, unknown>)
+      : null;
+
+    items.value = payload
+      ? Object.entries(payload).map(([id, raw]) => {
+          const data = (raw ?? {}) as Record<string, unknown>;
+          return {
+            id,
+            name: String(data.name ?? "Sem nome"),
+            category: data.category ? String(data.category) : null,
+            imageUrl: data.imageUrl ? String(data.imageUrl) : null,
+          };
+        })
+      : [];
+    items.value.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
     if (!items.value.length) {
       errorMessage.value =
-        "Nenhum item disponível para locação. Cadastre um item ou finalize uma locação em aberto.";
+        "Nenhum item disponivel para locacao. Cadastre um item ou finalize uma locacao em aberto.";
     }
   } catch (error) {
     console.error("[reservations] fetch items error:", error);
     errorMessage.value =
-      "Não foi possível carregar os itens disponíveis. Tente novamente.";
+      "Nao foi possivel carregar os itens disponiveis. Tente novamente.";
   } finally {
     loadingItems.value = false;
   }
@@ -88,15 +96,15 @@ async function fetchItems() {
 async function submit() {
   errorMessage.value = "";
   if (!canSubmit.value) return;
-  if (!firebase?.db) {
+  if (!firebase?.database) {
     errorMessage.value =
-      "Firebase não configurado. Defina as variáveis de ambiente.";
+      "Firebase nao configurado. Defina as variaveis de ambiente.";
     return;
   }
 
   const item = items.value.find((entry) => entry.id === form.itemId);
   if (!item) {
-    errorMessage.value = "Selecione um item válido.";
+    errorMessage.value = "Selecione um item valido.";
     return;
   }
 
@@ -110,39 +118,47 @@ async function submit() {
 
   if (start >= end) {
     errorMessage.value =
-      "A data de fim deve ser maior que a data de início da locação.";
+      "A data de fim deve ser maior que a data de inicio da locacao.";
     return;
   }
 
   loading.value = true;
   try {
-    const rentalsCollection = collection(firebase.db, "rentals");
-    const rentalRef = doc(rentalsCollection);
-    const timestamp = serverTimestamp();
-    await setDoc(rentalRef, {
+    const nowIso = new Date().toISOString();
+    const rentalsRef = dbRef(firebase.database, "rentals");
+    const rentalRef = push(rentalsRef);
+    const rentalId = rentalRef.key;
+    if (!rentalId) {
+      throw new Error("Falha ao gerar identificador da locacao.");
+    }
+
+    await set(rentalRef, {
+      id: rentalId,
       itemId: item.id,
       itemName: item.name,
       itemCategory: item.category,
       itemImageUrl: item.imageUrl,
       lessee: form.locatario.trim(),
+      lesseeId: null,
       notes: form.observacoes.trim() || null,
-      startDate: Timestamp.fromDate(start),
-      expectedReturnDate: Timestamp.fromDate(end),
+      startDate: start.toISOString(),
+      expectedReturnDate: end.toISOString(),
       status: "open",
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdBy: "admin",
     });
 
-    await updateDoc(doc(firebase.db, "items", item.id), {
+    await update(dbRef(firebase.database, `items/${item.id}`), {
       status: "rented",
-      updatedAt: serverTimestamp(),
+      updatedAt: nowIso,
     });
 
     navigateTo("/admin/home");
   } catch (error) {
     console.error("[reservations] create error:", error);
     errorMessage.value =
-      "Não foi possivel abrir a locação. Tente novamente em instantes.";
+      "Nao foi possivel abrir a locacao. Tente novamente em instantes.";
   } finally {
     loading.value = false;
   }
@@ -411,3 +427,4 @@ async function submit() {
   font-size: 14px;
 }
 </style>
+
