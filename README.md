@@ -42,7 +42,7 @@ Aplicação Nuxt 4 que digitaliza o ciclo de aluguel de equipamentos de uma loca
 - Página inicial (`/admin/home`) exibe KPIs (itens disponíveis, locações ativas, atrasos), tabelas operacionais e links rápidos.
 - Formulários dedicados:
   - **Clientes** (`/admin/clients/form`): registra novos usuários (inclui criação no Firebase Auth) e lista clientes sincronizados da coleção `users`.
-  - **Itens** (`/admin/items/form`): cadastra equipamentos sem upload de imagem (campos texto e status). Possui importador em lote que aceita um array JSON com campos `imageUrl` opcionais.
+  - **Itens** (`/admin/items/form`): cadastra equipamentos sem upload de imagem (campos texto e status).
   - **Locações** (`/admin/reservations/open`): cria contratos, valida datas e altera status do item.
 - Gerenciamento de sessão com mesma ação de logout do portal.
 
@@ -53,7 +53,6 @@ Aplicação Nuxt 4 que digitaliza o ciclo de aluguel de equipamentos de uma loca
 - Uma conta Firebase com:
   - Authentication habilitado (Email/Password e Google opcional).
   - Realtime Database no modo seguro (regra de leitura/escrita ajustada ao projeto).
-  - Storage opcional para hospedar imagens referenciadas via `imageUrl`.
 
 ## Configuração do ambiente
 
