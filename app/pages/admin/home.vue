@@ -24,7 +24,12 @@
           <span class="hello"
             >Olá, <b>{{ userName }}</b></span
           >
-          <button class="avatar" type="button" :title="userEmail">
+          <button
+            class="avatar"
+            type="button"
+            :title="userEmail"
+            @click="openProfile"
+          >
             {{ userInitials }}
           </button>
           <button
@@ -172,6 +177,7 @@ type Unsubscribe = () => void;
 const q = ref("");
 
 const { user } = useFirebaseUser();
+const openProfile = () => navigateTo("/admin/profile");
 const userEmail = computed(() => user.value?.email ?? "user@aluga.ai");
 const userName = computed(() => {
   if (user.value?.displayName) {
