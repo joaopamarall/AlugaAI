@@ -76,87 +76,51 @@
           <NuxtLink to="/admin/home" class="btn btn-outline">Voltar</NuxtLink>
         </div>
       </form>
-    </section>
+      <div class="card-divider" role="presentation"></div>
 
-    <section class="card">
-      <header class="list-head">
-        <div>
-          <h2>Usuários com conta</h2>
-          <p>
-            Lista sincronizada com os usuários autenticados (coleção users).
-          </p>
+      <div class="list-wrapper">
+        <header class="list-head">
+          <div>
+            <h2>Clientes cadastrados</h2>
+            <p>Todos os registros sincronizados da coleção de usuários.</p>
+          </div>
+          <span v-if="loadingUsers" class="tag tag-muted">Carregando...</span>
+        </header>
+
+        <p v-if="usersError" class="alert alert-error">{{ usersError }}</p>
+        <div v-else-if="clientUsers.length === 0" class="empty">
+          Nenhum cliente encontrado.
         </div>
-        <span v-if="loadingUsers" class="tag tag-muted">Carregando...</span>
-      </header>
-
-      <p v-if="usersError" class="alert alert-error">{{ usersError }}</p>
-      <div v-else-if="users.length === 0" class="empty">
-        Nenhum usuario encontrado.
-      </div>
-      <div v-else class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>E-mail</th>
-              <th>Papel</th>
-              <th>Criado em</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="user in users" :key="user.id">
-              <td>{{ user.displayName ?? "-" }}</td>
-              <td>{{ user.email ?? "-" }}</td>
-              <td class="capitalize">{{ user.role ?? "-" }}</td>
-              <td>{{ formatDate(user.createdAt) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card">
-      <header class="list-head">
-        <div>
-          <h2>Clientes cadastrados pelo admin</h2>
-          <p>Dados armazenados na coleção clients.</p>
+        <div v-else class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Documento</th>
+                <th>Telefone</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="client in clientUsers" :key="client.id">
+                <td>{{ client.displayName ?? "-" }}</td>
+                <td>{{ client.email ?? "-" }}</td>
+                <td>{{ client.document ?? "-" }}</td>
+                <td>{{ client.phone ?? "-" }}</td>
+                <td>{{ formatDate(client.createdAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <span v-if="loadingClients" class="tag tag-muted">Carregando...</span>
-      </header>
-
-      <p v-if="clientsError" class="alert alert-error">{{ clientsError }}</p>
-      <div v-else-if="clients.length === 0" class="empty">
-        Nenhum cliente adicional cadastrado ainda.
-      </div>
-      <div v-else class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>E-mail</th>
-              <th>Telefone</th>
-              <th>Documento</th>
-              <th>Criado em</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="client in clients" :key="client.id">
-              <td>{{ client.nome }}</td>
-              <td>{{ client.email || "-" }}</td>
-              <td>{{ client.telefone || "-" }}</td>
-              <td>{{ client.documento }}</td>
-              <td>{{ formatDate(client.createdAt) }}</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onValue, push, ref as dbRef, set } from "firebase/database";
-import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { onValue, ref as dbRef, set } from "firebase/database";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useFirebaseUser } from "@/composables/useFirebaseUser";
 
 type Unsubscribe = () => void;
@@ -184,27 +148,24 @@ const users = ref<
     displayName: string | null;
     email: string | null;
     role: string | null;
-    createdAt: Date | null;
-  }>
->([]);
-
-const clients = ref<
-  Array<{
-    id: string;
-    nome: string;
-    email: string | null;
-    telefone: string | null;
-    documento: string;
+    document: string | null;
+    phone: string | null;
+    address: string | null;
     createdAt: Date | null;
   }>
 >([]);
 
 const loadingUsers = ref(true);
-const loadingClients = ref(true);
 const usersError = ref("");
-const clientsError = ref("");
 
 const unsubscribers: Unsubscribe[] = [];
+
+const clientUsers = computed(() =>
+  users.value.filter((entry) => {
+    const role = entry.role?.toLowerCase();
+    return role === "client" || role === "cliente";
+  })
+);
 
 onMounted(() => {
   if (!firebase?.database) {
@@ -212,9 +173,7 @@ onMounted(() => {
       "Firebase não configurado. Verifique as variáveis de ambiente.";
     errorMessage.value = message;
     usersError.value = message;
-    clientsError.value = message;
     loadingUsers.value = false;
-    loadingClients.value = false;
     return;
   }
 
@@ -231,6 +190,9 @@ onMounted(() => {
               displayName: data.displayName ? String(data.displayName) : null,
               email: data.email ? String(data.email) : null,
               role: data.role ? String(data.role) : null,
+              document: data.document ? String(data.document) : null,
+              phone: data.phone ? String(data.phone) : null,
+              address: data.address ? String(data.address) : null,
               createdAt: toDate(data.createdAt),
             };
           })
@@ -250,40 +212,6 @@ onMounted(() => {
     }
   );
   unsubscribers.push(stopUsers);
-
-  const clientsRef = dbRef(firebase.database, "clients");
-  const stopClients = onValue(
-    clientsRef,
-    (snapshot) => {
-      const payload = snapshot.val() as Record<string, unknown> | null;
-      const list = payload
-        ? Object.entries(payload).map(([id, raw]) => {
-            const data = (raw ?? {}) as Record<string, unknown>;
-            return {
-              id,
-              nome: String(data.nome ?? ""),
-              email: data.email ? String(data.email) : null,
-              telefone: data.telefone ? String(data.telefone) : null,
-              documento: String(data.documento ?? ""),
-              createdAt: toDate(data.createdAt),
-            };
-          })
-        : [];
-      clients.value = list.sort((a, b) => {
-        const aTime = a.createdAt?.getTime() ?? 0;
-        const bTime = b.createdAt?.getTime() ?? 0;
-        return bTime - aTime;
-      });
-      loadingClients.value = false;
-      clientsError.value = "";
-    },
-    (error) => {
-      console.error("[clients] clients snapshot error:", error);
-      clientsError.value = "Não foi possível carregar os clientes.";
-      loadingClients.value = false;
-    }
-  );
-  unsubscribers.push(stopClients);
 });
 
 onBeforeUnmount(() => {
@@ -310,7 +238,7 @@ function setSuccess(message: string) {
     successTimer.value = window.setTimeout(() => {
       successMessage.value = "";
       successTimer.value = null;
-    }, 4000);
+    }, 15000);
   }
 }
 
@@ -320,33 +248,80 @@ async function submit() {
     errorMessage.value = "Preencha os campos obrigatórios.";
     return;
   }
-  if (!firebase?.database) {
+  if (!firebase?.database || !firebase?.createAuthUserWithPassword) {
     errorMessage.value = "Firebase não configurado.";
     return;
   }
 
+  const email = form.email.trim().toLowerCase();
+  const password = generateTemporaryPassword();
   saving.value = true;
   try {
-    const clientsRef = dbRef(firebase.database, "clients");
-    const newClientRef = push(clientsRef);
-    await set(newClientRef, {
-      nome: form.nome.trim(),
-      email: form.email.trim(),
-      telefone: form.telefone.trim() || null,
-      documento: form.documento.trim(),
-      endereco: form.endereco.trim() || null,
-      createdAt: new Date().toISOString(),
+    const { uid } = await firebase.createAuthUserWithPassword({
+      email,
+      password,
+      displayName: form.nome.trim(),
+    });
+
+    const nowIso = new Date().toISOString();
+    await set(dbRef(firebase.database, `users/${uid}`), {
+      uid,
+      displayName: form.nome.trim(),
+      email,
+      role: "client",
+      isAdmin: false,
+      document: form.documento.trim(),
+      phone: form.telefone.trim() || null,
+      address: form.endereco.trim() || null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
       createdBy: currentUser.value?.uid ?? null,
     });
 
-    setSuccess("Cliente cadastrado com sucesso.");
+    setSuccess(`Cliente cadastrado com sucesso. Senha provisória: ${password}`);
     resetForm();
   } catch (error) {
     console.error("[clients] add client error:", error);
-    errorMessage.value = "N�o foi poss�vel salvar o cliente.";
+    errorMessage.value = formatClientCreationError(error);
   } finally {
     saving.value = false;
   }
+}
+
+function formatClientCreationError(error: unknown) {
+  const firebaseError = (error ?? {}) as { code?: string };
+  switch (firebaseError.code) {
+    case "auth/email-already-in-use":
+      return "E-mail já está em uso. Solicite que o cliente redefina a senha ou entre em contato.";
+    case "auth/invalid-email":
+      return "E-mail inválido. Verifique o endereço informado.";
+    case "auth/operation-not-allowed":
+      return "Criação de contas desabilitada no projeto. Verifique as configurações do Firebase.";
+    default:
+      return "Não foi possível criar o cliente. Tente novamente em instantes.";
+  }
+}
+
+function generateTemporaryPassword(length = 10) {
+  const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const result: string[] = [];
+  const buffer = length > 0 ? new Uint32Array(length) : new Uint32Array(0);
+  if (
+    length > 0 &&
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
+    crypto.getRandomValues(buffer);
+    for (let i = 0; i < length; i++) {
+      result.push(charset[buffer[i] % charset.length]);
+    }
+  } else {
+    for (let i = 0; i < length; i++) {
+      const index = Math.floor(Math.random() * charset.length);
+      result.push(charset[index]);
+    }
+  }
+  return result.join("");
 }
 
 function formatDate(date: Date | null) {
@@ -385,6 +360,18 @@ function toDate(value: unknown): Date | null {
   padding: clamp(24px, 5vw, 40px);
   display: grid;
   gap: 20px;
+}
+
+.card-divider {
+  height: 1px;
+  width: 100%;
+  background: rgba(148, 163, 184, 0.3);
+  border: none;
+}
+
+.list-wrapper {
+  display: grid;
+  gap: 18px;
 }
 
 .card-head {

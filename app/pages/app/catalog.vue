@@ -300,7 +300,11 @@ onMounted(() => {
   }
 
   const itemsRef = dbRef(firebase.database, "items");
-  const itemsQuery = query(itemsRef, orderByChild("status"), equalTo("available"));
+  const itemsQuery = query(
+    itemsRef,
+    orderByChild("status"),
+    equalTo("available")
+  );
   const stopItems = onValue(
     itemsQuery,
     (snapshot) => {
@@ -361,7 +365,8 @@ watch(
         const list = payload
           ? Object.entries(payload).map(([id, raw]) => {
               const data = (raw ?? {}) as Record<string, unknown>;
-              const startIso = toIso(data.startDate) ?? new Date().toISOString();
+              const startIso =
+                toIso(data.startDate) ?? new Date().toISOString();
               const endIso =
                 toIso(data.expectedReturnDate) ?? new Date().toISOString();
               return {
@@ -905,7 +910,7 @@ function toIso(value: unknown): string | null {
 
 .field input,
 .field textarea {
-  width: 100%;
+  width: 90%;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.45);
   padding: 12px 14px;
@@ -928,4 +933,3 @@ function toIso(value: unknown): string | null {
   padding-top: 8px;
 }
 </style>
-

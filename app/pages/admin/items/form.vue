@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { push, ref as dbRef, set } from "firebase/database";
-import {
-  getDownloadURL,
-  ref as storageRef,
-  uploadBytes,
-} from "firebase/storage";
-import { computed, onBeforeUnmount, reactive, ref, watchEffect } from "vue";
+import { computed, onBeforeUnmount, reactive, ref } from "vue";
 
 const form = reactive({
   nome: "",
@@ -15,8 +10,6 @@ const form = reactive({
   descricao: "",
 });
 
-const imageFile = ref<File | null>(null);
-const previewUrl = ref<string | null>(null);
 const saving = ref(false);
 const errorMessage = ref("");
 const nuxtApp = useNuxtApp();
@@ -26,28 +19,6 @@ const hasFirebase = computed(() => Boolean(firebase?.database));
 const canSubmit = computed(
   () => hasFirebase.value && form.nome.trim().length > 2 && !saving.value
 );
-
-function selectImage(event: Event) {
-  const target = event.target as HTMLInputElement;
-  const file = target.files && target.files.length ? target.files[0] : null;
-  imageFile.value = file;
-}
-
-watchEffect(() => {
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value);
-    previewUrl.value = null;
-  }
-  if (imageFile.value) {
-    previewUrl.value = URL.createObjectURL(imageFile.value);
-  }
-});
-
-onBeforeUnmount(() => {
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value);
-  }
-});
 
 async function submit() {
   errorMessage.value = "";
@@ -65,17 +36,6 @@ async function submit() {
     if (!itemId) {
       throw new Error("Falha ao gerar identificador do item.");
     }
-    let imageUrl: string | null = null;
-    let imagePath: string | null = null;
-
-    if (imageFile.value && firebase.storage) {
-      const safeName = imageFile.value.name.replace(/\s+/g, "-").toLowerCase();
-      imagePath = `items/${itemId}/${Date.now()}-${safeName}`;
-      const fileRef = storageRef(firebase.storage, imagePath);
-      await uploadBytes(fileRef, imageFile.value);
-      imageUrl = await getDownloadURL(fileRef);
-    }
-
     const nowIso = new Date().toISOString();
     await set(newItemRef, {
       id: itemId,
@@ -84,8 +44,6 @@ async function submit() {
       category: form.categoria.trim() || null,
       status: form.status,
       description: form.descricao.trim() || null,
-      imageUrl,
-      imagePath,
       createdAt: nowIso,
       updatedAt: nowIso,
     });
@@ -107,7 +65,7 @@ async function submit() {
       <header class="mb-4">
         <h1 class="h1">Novo item</h1>
         <p class="muted caption">
-          Cadastre um novo equipamento com status e imagem opcional.
+          Cadastre um novo equipamento com status e descrição.
         </p>
       </header>
 
@@ -158,23 +116,6 @@ async function submit() {
             class="input"
             placeholder="Detalhes, potencia, voltagem, acessorios..."
           ></textarea>
-        </div>
-
-        <div class="field">
-          <label class="label">Imagem do equipamento (opcional)</label>
-          <input
-            type="file"
-            accept="image/*"
-            class="input input-file"
-            @change="selectImage"
-          />
-          <p class="hint">
-            Use imagens em formato JPG ou PNG com ate 3MB. Sera exibida no
-            catálogo.
-          </p>
-          <div v-if="previewUrl" class="preview">
-            <img :src="previewUrl" alt="Pre-visualizacao do equipamento" />
-          </div>
         </div>
 
         <p v-if="errorMessage" class="error-msg">{{ errorMessage }}</p>
@@ -310,21 +251,6 @@ async function submit() {
   background-size: 6px 6px, 6px 6px, 2.5em 2.5em;
   background-repeat: no-repeat;
   padding-right: 44px;
-}
-
-.preview {
-  display: inline-flex;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px dashed rgba(var(--muted), 0.4);
-  background: rgb(var(--surface-2));
-  max-width: 260px;
-}
-.preview img {
-  display: block;
-  width: 100%;
-  border-radius: 10px;
-  object-fit: cover;
 }
 
 .actions {

@@ -1,15 +1,25 @@
-import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import {
+  deleteApp,
+  getApp,
+  getApps,
+  initializeApp,
+  type FirebaseApp,
+} from "firebase/app";
+import {
+  createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
+  updateProfile,
   type Auth,
   type User,
 } from "firebase/auth";
 import { getDatabase, type Database } from "firebase/database";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+
+const SECONDARY_APP_NAME = "alugaai-admin-secondary";
 
 export type FirebasePlugin = {
   app: FirebaseApp;
@@ -18,6 +28,11 @@ export type FirebasePlugin = {
   storage: FirebaseStorage;
   signInWithGoogle: () => Promise<void>;
   signOutFirebase: () => Promise<void>;
+  createAuthUserWithPassword: (options: {
+    email: string;
+    password: string;
+    displayName?: string | null;
+  }) => Promise<{ uid: string }>;
 };
 
 export default defineNuxtPlugin((_nuxtApp) => {
@@ -96,6 +111,42 @@ export default defineNuxtPlugin((_nuxtApp) => {
     await signOut(auth);
   };
 
+  const createAuthUserWithPassword: FirebasePlugin["createAuthUserWithPassword"] =
+    async ({ email, password, displayName }) => {
+      if (!email || !password) {
+        throw new Error("Email e senha são obrigatórios.");
+      }
+      const normalizedEmail = email.trim();
+      const secondaryApp = initializeApp(
+        firebaseConfig,
+        `${SECONDARY_APP_NAME}-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`
+      );
+
+      let secondaryAuth: Auth | null = null;
+      try {
+        secondaryAuth = getAuth(secondaryApp);
+        const credential = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          normalizedEmail,
+          password
+        );
+
+        const safeName = displayName?.trim();
+        if (safeName) {
+          await updateProfile(credential.user, { displayName: safeName });
+        }
+
+        return { uid: credential.user.uid };
+      } finally {
+        if (secondaryAuth) {
+          await signOut(secondaryAuth).catch(() => undefined);
+        }
+        await deleteApp(secondaryApp).catch(() => undefined);
+      }
+    };
+
   const payload: FirebasePlugin = {
     app,
     auth,
@@ -103,6 +154,7 @@ export default defineNuxtPlugin((_nuxtApp) => {
     storage: getStorage(app),
     signInWithGoogle,
     signOutFirebase,
+    createAuthUserWithPassword,
   };
 
   return {
@@ -112,5 +164,3 @@ export default defineNuxtPlugin((_nuxtApp) => {
     },
   };
 });
-
-
