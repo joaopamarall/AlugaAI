@@ -1,140 +1,148 @@
 # AlugaAI
 
-Aplicação web desenvolvida com Nuxt 4 para apoiar o fluxo de aluguel de equipamentos. O projeto reúne uma landing page pública, um portal para clientes e um painel administrativo conectados ao Firebase (Authentication, Realtime Database e Storage). A proposta é permitir que uma pequena locadora mantenha o catálogo atualizado, registre locações e acompanhe dados operacionais em tempo real.
+Aplicação Nuxt 4 que digitaliza o ciclo de aluguel de equipamentos de uma locadora: divulga a vitrine pública, oferece um portal para clientes e concentra a operação administrativa. O backend é baseado em Firebase Authentication e Realtime Database, garantindo sincronização em tempo real e um fluxo de login simplificado.
 
-## Visão Geral
+## Sumário
 
-- Landing page (`app/pages/index.vue`) apresenta a solução, CTA para cadastro e animações de destaque.
-- Autenticação (login com e-mail/senha ou Google) construída sobre Firebase Auth e gerenciada pelo plugin `app/plugins/firebase.client.ts`.
-- Controle de acesso com middleware global (`app/middleware/auth.global.ts`) que restringe `/app` a clientes autenticados e `/admin` a e-mails listados em `NUXT_PUBLIC_ADMIN_EMAILS`.
-- Portal do cliente (`/app/catalog`) lista itens disponíveis, permite reservar períodos e mostra locações ativas sincronizadas com o Realtime Database.
-- Painel administrativo (`/admin/home`) oferece indicadores, lista locações ativas, itens em manutenção e atalhos para os formulários de cadastro de itens, clientes e locações.
+- [Visão geral](#visão-geral)
+- [Principais funcionalidades](#principais-funcionalidades)
+- [Pré-requisitos](#pré-requisitos)
+- [Configuração do ambiente](#configuração-do-ambiente)
+- [Comandos úteis](#comandos-úteis)
+- [Estrutura de pastas](#estrutura-de-pastas)
+- [Modelagem no Realtime Database](#modelagem-no-realtime-database)
+- [Detalhes dos fluxos](#detalhes-dos-fluxos)
+- [Boas práticas e próximos passos](#boas-práticas-e-próximos-passos)
 
-## Tecnologias e bibliotecas
+## Visão geral
 
-- [Nuxt 4](https://nuxt.com/) (Vue 3 + TypeScript) com diretório de origem em `app/`.
-- Firebase (Auth, Realtime Database, Storage) para login, persistência e upload de imagens.
-- Tailwind CLI instalado, mas o projeto utiliza principalmente CSS customizado (`app/assets/css/main.css`) para manter controle visual fino.
-- Composables reativos (`app/composables`) para compartilhar estado de autenticação (`useFirebaseUser`) e perfil/role (`useUserProfile`).
+- **Stack:** Nuxt 4 (Vue 3 + TypeScript) com estrutura em `app/`, Tailwind (via CLI/Vite) e Firebase (Auth, Realtime Database e Storage para ativos opcionais).
+- **Objetivo:** permitir que uma pequena locadora mantenha o catálogo atualizado, controle locações, cadastre clientes e acompanhe indicadores em tempo real.
+- **Camadas:** landing page pública, portal autenticado para clientes (`/app`) e painel administrativo (`/admin`) restrito a usuários com e-mail autorizado.
 
-## Fluxos principais da aplicação
+## Principais funcionalidades
 
-### Landing page
-- Estrutura hero com argumentos de venda, animações progressivas e cartões informativos.
-- Navegação básica para `/login` e `/register`.
+### Página pública
+- Hero com proposta de valor, argumentos comerciais e CTAs para criação de conta ou login.
+- Layout responsivo com temas e animações leves definidos em `app/assets/css/main.css`.
 
-### Autenticação e registro
-- **Login** (`app/pages/login/index.vue`) valida e-mail/senha, permite alternar visibilidade da senha e autentica via Firebase; também expõe o botão “Entrar com Google” usando `signInWithPopup`.
-- **Cadastro** (`app/pages/register/index.vue`) cria contas por e-mail/senha, atualiza o `displayName`, chama `ensureUserProfile` para persistir o perfil em `users/{uid}` e aplica o mesmo padrão visual do login.
-- Persistência pode ser alternada entre sessão e armazenamento local conforme a opção “Lembrar-me”.
+### Autenticação
+- Login por e-mail/senha ou Google (`/login`).
+- Registro com confirmação de senha (`/register`) que já cria o perfil em `users/{uid}` via `ensureUserProfile`.
+- Persistência de sessão (Firebase Auth) controlada pelo plugin `app/plugins/firebase.client.ts`.
 
 ### Portal do cliente (`/app/catalog`)
-- Lista itens com status `available`, com filtro por nome/categoria e visualização de imagens hospedadas no Firebase Storage.
-- Modal de reserva registra locações em `rentals/{id}` e muda o status do item para `rented`. Todos os campos são validados (datas, item selecionado e sessão válida).
-- Bloco “Minhas locações” consulta o banco em tempo real (filtrado por `lesseeId`) para exibir contratos ativos.
-- O botão “Sair” encerra a sessão no Firebase, reseta o perfil no estado global e redireciona para `/login`.
+- Lista itens com status `available`, buscando dados em `items/`.
+- Reservas com seleção de período, persistindo contratos em `rentals/` e atualizando o status do item para `rented`.
+- Bloco “Minhas locações” consulta contratos filtrados por `lesseeId`.
+- Logout encerra a sessão no Firebase e limpa o estado reativo.
 
-### Painel administrativo (`/admin/home`)
-- Indicadores com a contagem de itens disponíveis, locações abertas e atrasos (retornos previstos antes do horário atual).
-- Listas orientadas à operação: locações abertas ordenadas por data, itens em manutenção e links rápidos para os formulários de cadastro.
-- Busca textual (campo `q`) pronta para evoluções de filtragem.
-- Logout com o mesmo fluxo do portal do cliente, garantindo a limpeza de estado.
-
-### Cadastros administrativos
-- **Itens** (`/admin/items/form`): cria registros em `items/`, realiza upload opcional de imagem para o Storage, salva metadados (nome, categoria, status, descrição) e define timestamps `createdAt`/`updatedAt`.
-- **Clientes** (`/admin/clients/form`): cadastra dados básicos em `clients/`, lista usuários autenticados (coleção `users`) e exibe clientes cadastrados manualmente.
-- **Locações** (`/admin/reservations/open`): busca itens `available`, valida datas e salva contratos em `rentals/` com status `open`, alterando o status do item para `rented` em seguida.
-
-## Integração com Firebase
-
-- O plugin `app/plugins/firebase.client.ts` centraliza a inicialização usando `runtimeConfig.public` (variáveis `NUXT_PUBLIC_...`). Ele expõe `app`, `auth`, `database`, `storage`, `signInWithGoogle` e `signOutFirebase` via `nuxtApp.$firebase`.
-- `app/composables/useFirebaseUser.ts` mantém `user` e `authReady` reativos compartilhados em toda a aplicação.
-- `app/composables/useUserProfile.ts` resolve o papel do usuário (`admin` ou `client`). O método `ensureUserProfile` cria/atualiza o registro em `users/{uid}`, identifica administradores comparando o e-mail com `NUXT_PUBLIC_ADMIN_EMAILS` e atualiza `role`/`isAdmin` automaticamente.
-- `app/middleware/auth.global.ts` aguarda `authReady`, força o carregamento do perfil e bloqueia rotas conforme o papel.
-
-## Modelagem no Realtime Database
-
-| Caminho                 | Campos relevantes                                                                 | Quando é escrito                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `users/{uid}`           | `role`, `isAdmin`, `email`, `displayName`, `createdAt`, `updatedAt`                | Após login/cadastro, via `ensureUserProfile`.                                                 |
-| `items/{itemId}`        | `name`, `code`, `category`, `status`, `description`, `imageUrl`, timestamps       | Formulário de itens e atualizações automáticas ao abrir locações.                             |
-| `rentals/{rentalId}`    | `itemId`, `itemName`, `lesseeId`, `startDate`, `expectedReturnDate`, `status`     | Reservas criadas por clientes ou administradores.                                            |
-| `clients/{clientId}`    | `nome`, `email`, `telefone`, `documento`, `endereco`, `createdBy`, `createdAt`     | Cadastro manual de clientes no painel administrativo.                                        |
-
-> **Importante:** Regras de segurança do Realtime Database e Storage devem ser configuradas diretamente no Firebase para respeitar os papéis `admin`/`client` planejados no front-end.
-
-## Organização do código
-
-- `app/pages/index.vue`: landing page pública com animações e copy principal.
-- `app/pages/login/*.vue` e `app/pages/register/*.vue`: telas de autenticação.
-- `app/pages/app/*.vue`: rotas do portal do cliente, com redirecionamento definido em `app/pages/app/index.vue`.
-- `app/pages/admin/*.vue`: painel e formulários administrativos; `app/pages/admin/index.vue` redireciona para `home`.
-- `app/composables/`: estados compartilhados (autenticação e perfil).
-- `app/assets/css/main.css`: base de estilos utilizada globalmente (importada em `nuxt.config.ts`).
-- `.env`: credenciais de desenvolvimento do Firebase (não versionar em produção). Crie um `.env.example` para compartilhar os nomes das variáveis.
-- `nuxt.config.ts`: habilita módulo Tailwind, registra CSS global e expõe variáveis públicas.
+### Painel administrativo
+- Topo com avatar/atalho para edição do próprio perfil em `/admin/profile`.
+- Página inicial (`/admin/home`) exibe KPIs (itens disponíveis, locações ativas, atrasos), tabelas operacionais e links rápidos.
+- Formulários dedicados:
+  - **Clientes** (`/admin/clients/form`): registra novos usuários (inclui criação no Firebase Auth) e lista clientes sincronizados da coleção `users`.
+  - **Itens** (`/admin/items/form`): cadastra equipamentos sem upload de imagem (campos texto e status). Possui importador em lote que aceita um array JSON com campos `imageUrl` opcionais.
+  - **Locações** (`/admin/reservations/open`): cria contratos, valida datas e altera status do item.
+- Gerenciamento de sessão com mesma ação de logout do portal.
 
 ## Pré-requisitos
 
-- Node.js 18+ (recomendado manter a mesma versão usada no desenvolvimento local).
-- Conta no Firebase com o projeto configurado e módulos Authentication, Realtime Database e Storage habilitados.
-- Credenciais Web do Firebase configuradas nas variáveis de ambiente descritas abaixo.
+- **Node.js** ≥ 20.x (recomendado LTS mais recente).
+- **npm** ≥ 10.x (instalado junto com o Node).
+- Uma conta Firebase com:
+  - Authentication habilitado (Email/Password e Google opcional).
+  - Realtime Database no modo seguro (regra de leitura/escrita ajustada ao projeto).
+  - Storage opcional para hospedar imagens referenciadas via `imageUrl`.
 
-## Variáveis de ambiente
+## Configuração do ambiente
 
-Crie um arquivo `.env` na raiz com:
+1. **Clonar o repositório**
+   ```bash
+   git clone <url-do-repositorio>
+   cd alugaAI-projeto/AlugaAI
+   ```
 
-```
-NUXT_PUBLIC_FIREBASE_API_KEY=
-NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NUXT_PUBLIC_FIREBASE_PROJECT_ID=
-NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NUXT_PUBLIC_FIREBASE_APP_ID=
-NUXT_PUBLIC_FIREBASE_MEASUREMENT_ID= # opcional
-NUXT_PUBLIC_FIREBASE_DATABASE_URL=
-NUXT_PUBLIC_ADMIN_EMAILS= # lista separada por vírgula (ex.: admin@empresa.com,outro@dominio.com)
-```
-
-> Em produção, mantenha os valores seguros e considere usar `.env.example` com placeholders para orientar outros colegas.
-
-## Executando localmente
-
-1. Instale as dependências:
+2. **Instalar dependências**
    ```bash
    npm install
    ```
-2. Configure o arquivo `.env` conforme descrito acima.
-3. Inicie o servidor em modo desenvolvimento (porta padrão `3000`):
+
+3. **Configurar variáveis de ambiente**
+
+   Crie um arquivo `.env` (ou configure no ambiente de deploy) com as variáveis abaixo:
+
+   ```env
+   NUXT_PUBLIC_FIREBASE_API_KEY=
+   NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+   NUXT_PUBLIC_FIREBASE_PROJECT_ID=
+   NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+   NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+   NUXT_PUBLIC_FIREBASE_APP_ID=
+   NUXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
+   NUXT_PUBLIC_FIREBASE_DATABASE_URL=
+   NUXT_PUBLIC_ADMIN_EMAILS=admin@empresa.com,outro-admin@empresa.com
+   ```
+
+   > As credenciais públicas são lidas em `nuxt.config.ts` e injetadas via `nuxtApp.$firebase`.
+
+4. **Rodar o projeto em modo desenvolvimento**
    ```bash
    npm run dev
    ```
-4. Para gerar build de produção:
-   ```bash
-   npm run build
-   npm run preview
-   ```
+   O Nuxt exibirá no terminal a URL local (por padrão `http://localhost:3000`). A aplicação é atualizada automaticamente a cada alteração.
 
-## Scripts disponíveis
+## Comandos úteis
 
-| Script              | Descrição                                                     |
-| ------------------- | ------------------------------------------------------------- |
-| `npm run dev`       | Executa o servidor Vite/Nuxt em modo desenvolvimento.         |
-| `npm run build`     | Cria a build de produção (renderização híbrida/SSR).          |
-| `npm run preview`   | Sobe pré-visualização da build de produção.                   |
-| `npm run generate`  | Gera versão estática (quando necessário).                     |
-| `npm run postinstall` | Executa `nuxt prepare` (script automatizado pelo Nuxt 4).   |
+| Comando            | Descrição                                        |
+| ------------------ | ------------------------------------------------ |
+| `npm run dev`      | Inicia o servidor de desenvolvimento (hot reload). |
+| `npm run build`    | Gera a build de produção.                        |
+| `npm run preview`  | Sobe a build de produção localmente.             |
+| `npm run generate` | Gera saída estática (SSG) quando aplicável.      |
 
-## Dicas para avaliação
+## Estrutura de pastas
 
-- Teste o fluxo completo: cadastro → login → reserva de item → saída e novo login para garantir persistência.
-- Configure ao menos um e-mail de administrador em `NUXT_PUBLIC_ADMIN_EMAILS` para acessar as rotas `/admin`.
-- Verifique no Firebase Realtime Database se os registros são criados em `users`, `items`, `clients` e `rentals`, confirmando timestamps e estados (`status`).
-- Itens adicionados com imagem ficam armazenados em `items/{itemId}/...` no Storage; confirme se as regras permitem leitura para usuários autenticados.
+```
+app/
+├─ assets/             # CSS global (main.css) e assets estáticos
+├─ composables/        # Hooks reativos (auth, perfil)
+├─ middleware/         # Middleware global de proteção de rotas
+├─ pages/              # Rotas públicas, /app e /admin
+│  ├─ admin/           # Home, formulários, profile
+│  ├─ app/             # Portal do cliente (catalog)
+│  ├─ login/, register # Fluxos de autenticação
+│  └─ index.vue        # Landing page
+├─ plugins/            # Inicialização do Firebase (cliente)
+└─ app.vue             # Shell base do Nuxt
+```
 
-## Próximos passos sugeridos
+## Modelagem no Realtime Database
 
-- Ajustar regras de segurança do Firebase para refletir os papéis `admin`/`client` e proteger operações sensíveis.
-- Criar Cloud Functions ou automações para atualizar status de itens ao encerrar locações e gerar alertas de atraso.
-- Versionar um `.env.example` com placeholders e documentar as regras do Realtime Database/Storage no repositório.
-- Adicionar testes e2e (ex.: Cypress ou Playwright) cobrindo fluxos críticos de autenticação, reserva e administração.
+| Caminho            | Conteúdo                                                                                                  | Quem grava                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `users/{uid}`      | Perfil do usuário (nome, e-mail, função, telefone, documento, endereço, timestamps).                      | `ensureUserProfile`, tela de perfil admin. |
+| `items/{id}`       | Equipamentos (nome, código, categoria, status, descrição, `imageUrl` opcional, timestamps).               | Formulário `/admin/items/form` e importador. |
+| `clients/{id}`     | Cadastros manuais de clientes (nome, e-mail, documento, telefone, endereço, timestamps, autor).          | `/admin/clients/form`.                     |
+| `rentals/{id}`     | Locações (item referenciado, locatário, datas, status).                                                   | `/admin/reservations/open` e portal cliente. |
+| `reservations/`    | Entradas auxiliares para reservas abertas (utilizadas na home admin).                                    | Painel administrativo.                     |
+
+> Itens importados via JSON podem definir `imageUrl` apontando para um arquivo público (local ou Storage). O formulário manual não realiza upload.
+
+## Detalhes dos fluxos
+
+- **Middleware de acesso:** `app/middleware/auth.global.ts` aguarda o estado do Firebase Auth, garante o carregamento do perfil e bloqueia `/admin` para usuários sem o papel `admin` listado em `NUXT_PUBLIC_ADMIN_EMAILS`.
+- **Perfil administrativo:** `/admin/profile` permite ao usuário editar nome, documento, telefone e endereço. Também sincroniza o `displayName` no Firebase Auth.
+- **Cadastro de itens:** formulário simples sem upload. O importador permitir inserir vários itens de uma vez colando um array JSON. Campos suportados: `name`, `code`, `category`, `status` (`available`/`rented`/`maintenance`), `description`, `imageUrl` (opcional).
+- **Cadastro de clientes:** ao salvar um cliente manualmente, o sistema cria uma conta na Auth com senha provisória e já grava o registro em `users/{uid}` com o papel `client`.
+- **Reserva de itens (portal cliente):** valida datas, atualiza o status do item e mantém lista de locações em tempo real para o usuário logado.
+
+## Boas práticas e próximos passos
+
+- **Regras de segurança:** ajuste o Realtime Database e Storage para permitir leitura/escrita apenas para usuários autenticados conforme papel.
+- **Uploads de imagem:** atualmente o upload manual foi desativado; caso volte a ser necessário, reabilite o fluxo no formulário de itens e garanta limites de tamanho/formato no Storage.
+- **CI/CD:** considere adicionar lint/teste automatizado antes do deploy.
+- **Observabilidade:** logs importantes já usam `console.error`. Avalie integrar com uma solução de monitoramento em produção.
+
+---
+Feito com Nuxt, Firebase e bastante tempo de CSS artesanal. 🚀
